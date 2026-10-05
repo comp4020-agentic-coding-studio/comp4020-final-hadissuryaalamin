@@ -41,8 +41,12 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
       .prepare("SELECT * FROM picks WHERE cleaner_id = ? ORDER BY slot")
       .all(userId) as PickRow[];
     const cap = capForRank(cleaner.rank);
+    const user = db.prepare("SELECT username FROM users WHERE id = ?").get(userId) as
+      | { username: string }
+      | undefined;
 
     return reply.send({
+      username: user?.username ?? null,
       rank: cleaner.rank,
       score,
       picks: picks.map((p) => ({ id: p.id, property_id: p.property_id, slot: p.slot })),

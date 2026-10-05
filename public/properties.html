@@ -22,19 +22,26 @@
       <a href="/reviews.html">Reviews</a>
     </nav>
 
-    <section id="properties-section">
+    <section class="card">
+      <h2>Add a property</h2>
       <form id="add-property-form" class="inline-form">
-        <label>Name <input type="text" name="name" required /></label>
-        <label>Address <input type="text" name="address" required /></label>
+        <label>Name <input type="text" name="name" autocomplete="off" required /></label>
+        <label>Address <input type="text" name="address" autocomplete="off" required /></label>
         <button type="submit" class="primary">Add property</button>
       </form>
       <p id="properties-status" class="status" role="status"></p>
-      <table>
-        <thead>
-          <tr><th>Name</th><th>Address</th><th>Owner</th><th></th></tr>
-        </thead>
-        <tbody id="properties-body"></tbody>
-      </table>
+    </section>
+
+    <section id="properties-section" class="card">
+      <h2>All properties</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Address</th><th>Claimed by</th><th><span class="visually-hidden">Actions</span></th></tr>
+          </thead>
+          <tbody id="properties-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <footer><a href="/readme/">About this app</a></footer>
@@ -43,6 +50,8 @@
       const whoami = document.getElementById("whoami");
       const propertiesBody = document.getElementById("properties-body");
       const propertiesStatus = document.getElementById("properties-status");
+      const TRASH_ICON =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 
       function setStatus(el, text, kind) {
         el.textContent = text;
@@ -101,9 +110,9 @@
           <td>${escapeHtml(property.name)}</td>
           <td>${escapeHtml(property.address)}</td>
           <td>${property.owner ? escapeHtml(property.owner) : '<span class="muted">unclaimed</span>'}</td>
-          <td>
+          <td class="actions">
             <button type="button" data-edit="${property.id}">Edit</button>
-            <button type="button" class="danger icon-btn" data-delete="${property.id}" title="Delete" aria-label="Delete">🗑</button>
+            <button type="button" class="danger icon-btn" data-delete="${property.id}" title="Delete ${escapeHtml(property.name)}" aria-label="Delete ${escapeHtml(property.name)}">${TRASH_ICON}</button>
           </td>
         `;
         tr.querySelector("[data-edit]").addEventListener("click", () => startEditProperty(tr, property));
@@ -114,11 +123,11 @@
         tr.innerHTML = `
           <td colspan="3">
             <div class="edit-fields">
-              <input type="text" value="${escapeHtml(property.name)}" data-field="name" />
-              <input type="text" value="${escapeHtml(property.address)}" data-field="address" />
+              <input type="text" value="${escapeHtml(property.name)}" data-field="name" aria-label="Name" />
+              <input type="text" value="${escapeHtml(property.address)}" data-field="address" aria-label="Address" />
             </div>
           </td>
-          <td>
+          <td class="actions">
             <button type="button" class="primary" data-save>Save</button>
             <button type="button" data-cancel>Cancel</button>
           </td>
