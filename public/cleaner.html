@@ -151,7 +151,7 @@
           const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
           tr.innerHTML = `
             <td>${escapeHtml(entry.username)}</td>
-            <td><span class="pill">${entry.rank}</span></td>
+            <td><span class="pill ${escapeHtml(entry.rank)}">${escapeHtml(entry.rank)}</span></td>
             <td class="num">${scoreText}</td>
           `;
           leaderboardBody.appendChild(tr);
