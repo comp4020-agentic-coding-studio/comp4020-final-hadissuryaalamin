@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reviews</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Reviews</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <a href="/admin.html">Dashboard</a>
+      <a href="/properties.html">Properties</a>
+      <a href="/reviews.html" aria-current="true">Reviews</a>
+    </nav>
+
+    <div class="summary-cards" id="summary-cards">
+      <div class="card">
+        <span class="value" id="summary-period">—</span>
+        <span class="label">current period</span>
+      </div>
+      <div class="card">
+        <span class="value" id="summary-total">—</span>
+        <span class="label">reviews this month</span>
+      </div>
+      <div class="card">
+        <span class="value" id="summary-cleaners">—</span>
+        <span class="label">cleaners reviewed</span>
+      </div>
+      <div class="card">
+        <span class="value" id="summary-avg">—</span>
+        <span class="label">average stars (raw)</span>
+      </div>
+    </div>
+
+    <section id="reviews-section" class="card">
+      <h2>Add this month's reviews</h2>
+      <p class="muted">
+        Add one row per review (a cleaner can appear more than once). A
+        cleaner needs at least 5 reviews in the current period to be scored,
+        and the single worst review is dropped from their average.
+      </p>
+      <div id="review-rows"></div>
+      <div class="inline-form">
+        <button type="button" id="add-review-row">Add review row</button>
+        <button type="button" id="submit-reviews" class="primary">Submit batch</button>
+      </div>
+      <p id="reviews-status" class="status" role="status"></p>
+
+      <h3>Or upload a CSV</h3>
+      <p class="muted">
+        Two columns, <code>username,stars</code>, one row per review (a
+        header row is fine and gets skipped automatically). Usernames are
+        matched against existing cleaner accounts.
+      </p>
+      <div class="inline-form">
+        <input type="file" id="csv-input" accept=".csv,text/csv" />
+        <button type="button" id="submit-csv" class="primary">Upload CSV</button>
+      </div>
+      <p id="csv-status" class="status" role="status"></p>
+    </section>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const reviewRows = document.getElementById("review-rows");
+      const reviewsStatus = document.getElementById("reviews-status");
+      const csvInput = document.getElementById("csv-input");
+      const csvStatus = document.getElementById("csv-status");
+
+      let cleaners = []; // [{cleaner_id, username, rank, score}]
+      let reviewRowCount = 0;
+
+      function setStatus(el, text, kind) {
+        el.textContent = text;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 403) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        return res;
+      }
+
+      async function confirmAdmin() {
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 200) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        whoami.textContent = "admin";
+      }
+
+      async function loadCleaners() {
+        const res = await api("/api/leaderboard");
+        cleaners = await res.json();
+      }
+
+      async function loadSummary() {
+        const res = await api("/api/reviews/summary");
+        const summary = await res.json();
+        document.getElementById("summary-period").textContent = summary.period ?? "none yet";
+        document.getElementById("summary-total").textContent = summary.total_reviews;
+        document.getElementById("summary-cleaners").textContent = summary.cleaners_reviewed;
+        document.getElementById("summary-avg").textContent =
+          summary.average_stars === null ? "—" : summary.average_stars.toFixed(2);
+      }
+
+      function addReviewRow() {
+        const rowId = `review-row-${reviewRowCount++}`;
+        const row = document.createElement("div");
+        row.className = "review-row";
+        row.id = rowId;
+        const options = cleaners
+          .map((c) => `<option value="${c.cleaner_id}">${escapeHtml(c.username)}</option>`)
+          .join("");
+        row.innerHTML = `
+          <select data-cleaner>${options}</select>
+          <select data-stars>
+            <option value="1">1 star</option>
+            <option value="2">2 stars</option>
+            <option value="3">3 stars</option>
+            <option value="4">4 stars</option>
+            <option value="5" selected>5 stars</option>
+          </select>
+          <button type="button" data-remove>Remove</button>
+        `;
+        row.querySelector("[data-remove]").addEventListener("click", () => row.remove());
+        reviewRows.appendChild(row);
+      }
+
+      document.getElementById("add-review-row").addEventListener("click", addReviewRow);
+
+      async function submitBatch(items, statusEl) {
+        setStatus(statusEl, "Submitting…", "");
+        try {
+          const res = await api("/api/reviews/batch", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(items),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(statusEl, body.error ?? "Could not submit batch.", "error");
+            return false;
+          }
+          const result = await res.json();
+          setStatus(statusEl, `Submitted ${result.count} review(s) for period ${result.period}.`, "ok");
+          await loadSummary();
+          return true;
+        } catch {
+          setStatus(statusEl, "Could not reach the server.", "error");
+          return false;
+        }
+      }
+
+      document.getElementById("submit-reviews").addEventListener("click", async () => {
+        const rows = [...reviewRows.querySelectorAll(".review-row")];
+        if (rows.length === 0) {
+          setStatus(reviewsStatus, "Add at least one review row first.", "error");
+          return;
+        }
+        const items = rows.map((row) => ({
+          cleaner_id: Number(row.querySelector("[data-cleaner]").value),
+          stars: Number(row.querySelector("[data-stars]").value),
+        }));
+        const ok = await submitBatch(items, reviewsStatus);
+        if (ok) reviewRows.innerHTML = "";
+      });
+
+      // Minimal parser for this internal tool's own two-column export shape
+      // (username,stars) — no quoted-field support, matches what the CSV
+      // upload note on this page asks admins to provide.
+      function parseCsv(text) {
+        const byUsername = new Map(cleaners.map((c) => [c.username.toLowerCase(), c.cleaner_id]));
+        const items = [];
+        const unknown = new Set();
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+        for (const line of lines) {
+          const [rawUsername, rawStars] = line.split(",").map((v) => v.trim());
+          if (!rawUsername || !rawStars) continue;
+          if (rawUsername.toLowerCase() === "username") continue; // header row
+          const stars = Number(rawStars);
+          const cleanerId = byUsername.get(rawUsername.toLowerCase());
+          if (!cleanerId) {
+            unknown.add(rawUsername);
+            continue;
+          }
+          if (!Number.isInteger(stars) || stars < 1 || stars > 5) continue;
+          items.push({ cleaner_id: cleanerId, stars });
+        }
+        return { items, unknown: [...unknown] };
+      }
+
+      document.getElementById("submit-csv").addEventListener("click", async () => {
+        const file = csvInput.files?.[0];
+        if (!file) {
+          setStatus(csvStatus, "Choose a CSV file first.", "error");
+          return;
+        }
+        const text = await file.text();
+        const { items, unknown } = parseCsv(text);
+        if (items.length === 0) {
+          setStatus(csvStatus, "No valid rows found in that CSV.", "error");
+          return;
+        }
+        const ok = await submitBatch(items, csvStatus);
+        if (ok && unknown.length > 0) {
+          setStatus(
+            csvStatus,
+            `Submitted ${items.length} review(s). Skipped unknown username(s): ${unknown.join(", ")}.`,
+            "error",
+          );
+        }
+        if (ok) csvInput.value = "";
+      });
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      (async () => {
+        try {
+          await confirmAdmin();
+          await loadCleaners();
+          await loadSummary();
+          addReviewRow();
+        } catch (err) {
+          console.error(err);
+        }
+      })();
+    </script>
+  </body>
+</html>
