@@ -78,10 +78,10 @@
     </section>
 
     <section id="leaderboard-section">
-      <h2>Leaderboard</h2>
+      <h2>Cleaners</h2>
       <table>
         <thead>
-          <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
+          <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th><th>Preferred properties</th></tr>
         </thead>
         <tbody id="leaderboard-body"></tbody>
       </table>
@@ -277,7 +277,7 @@
           const created = await res.json();
           form.reset();
           setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
-          await loadCleanersIntoSelects();
+          await refreshAll();
         } catch {
           setStatus(cleanerStatus, "Could not reach the server.", "error");
         }
@@ -366,15 +366,29 @@
         }
       });
 
-      function renderLeaderboard(entries) {
+      function renderLeaderboard(entries, properties) {
+        // Group properties by owner so each cleaner's row lists theirs,
+        // instead of only being findable one-by-one in the Properties table.
+        const byOwner = new Map();
+        for (const property of properties ?? []) {
+          if (!property.owner) continue;
+          if (!byOwner.has(property.owner)) byOwner.set(property.owner, []);
+          byOwner.get(property.owner).push(property.name);
+        }
+
         leaderboardBody.innerHTML = "";
         for (const entry of entries) {
           const tr = document.createElement("tr");
           const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          const owned = byOwner.get(entry.username) ?? [];
+          const propsText = owned.length
+            ? owned.map(escapeHtml).join(", ")
+            : '<span class="muted">none</span>';
           tr.innerHTML = `
             <td>${escapeHtml(entry.username)}</td>
             <td><span class="pill">${entry.rank}</span></td>
             <td class="num">${scoreText}</td>
+            <td>${propsText}</td>
           `;
           leaderboardBody.appendChild(tr);
         }
@@ -393,7 +407,6 @@
       async function loadCleanersIntoSelects() {
         cleaners = await loadLeaderboard();
         populateRankSelect();
-        renderLeaderboard(cleaners);
       }
 
       function renderSummary(properties, cleanerList) {
@@ -406,8 +419,11 @@
       }
 
       async function refreshAll() {
+        // Both fetched before rendering either: the leaderboard table groups
+        // by cleaner but needs each property's owner to list what they hold.
         const [properties] = await Promise.all([loadProperties(), loadCleanersIntoSelects()]);
         renderProperties(properties);
+        renderLeaderboard(cleaners, properties);
         renderSummary(properties, cleaners);
       }
 
