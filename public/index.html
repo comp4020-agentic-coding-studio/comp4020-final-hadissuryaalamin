@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cleaner Performance &amp; Property Preference</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 28rem;
+        margin: 10vh auto 0;
+        padding: 0 1.5rem;
+      }
+      h1 { font-size: 1.25rem; }
+      form { display: grid; gap: 0.75rem; margin-top: 1.5rem; }
+      label { display: grid; gap: 0.25rem; font-size: 0.9rem; }
+      input { padding: 0.5rem; font-size: 1rem; }
+      button { padding: 0.6rem; font-size: 1rem; cursor: pointer; }
+      p.status { min-height: 1.2em; font-size: 0.9rem; }
+      footer { margin-top: 2rem; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Cleaner Performance &amp; Property Preference</h1>
+    <p>Sign in with your account.</p>
+    <form id="login-form">
+      <label>
+        Username
+        <input type="text" name="username" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit">Sign in</button>
+      <p class="status" id="login-status" role="status"></p>
+    </form>
+    <footer><a href="/readme/">About this app</a></footer>
+    <script>
+      const form = document.getElementById("login-form");
+      const status = document.getElementById("login-status");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        status.textContent = "Signing in…";
+        const data = new FormData(form);
+        try {
+          const res = await fetch("/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              username: data.get("username"),
+              password: data.get("password"),
+            }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            status.textContent = body.error ?? "Sign in failed.";
+            return;
+          }
+          const user = await res.json();
+          status.textContent = `Signed in as ${user.username} (${user.role}).`;
+        } catch {
+          status.textContent = "Could not reach the server.";
+        }
+      });
+    </script>
+  </body>
+</html>

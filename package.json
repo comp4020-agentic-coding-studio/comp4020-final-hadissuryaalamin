@@ -8,7 +8,8 @@
     "check": "pnpm typecheck && pnpm test:unit && pnpm test",
     "check:evidence": "node scripts/check-evidence.ts",
     "test": "vitest run",
-    "test:unit": "vitest run --config vitest.unit.config.ts"
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "start": "node src/server.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -22,8 +23,10 @@
     "pnpm": ">=11"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.5",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
-    "fastify": "^5.12.5"
+    "fastify": "^5.12.5",
+    "marked": "^18.0.14"
   }
 }
