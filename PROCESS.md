@@ -1,20 +1,111 @@
 # Process overview
 
-<!-- TEMPLATE: replace everything in this file with your own account, this
-     comment included --- `pnpm check:evidence` fails while it's still here. -->
+This is the crit 8 version of this file. It gets rewritten, not appended to,
+at crits 9 and 10, so read it as "what happened up to this point," not a
+running log.
 
-How you got from the brief to the harness, agentic workflow and stack behind
-this app, told however suits the work. The
-[final project brief](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/assessments/final-project/#what-you-submit)
-says what it covers and how long it runs.
+## From brief to design
 
-Markers follow the links you give them; they don't trawl the repo for evidence
-you didn't point at. A link to the record is one whose text is the commit hash,
-and it can sit anywhere in a sentence:
-[`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d) for one
-commit, or
-[`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
-for a range.
+The final project brief fixes very little on purpose: the app has to be
+multi-user, real-time, and persistent, and it has to be something I actually
+chose, not a generic CRUD demo. The domain — a short-stay cleaning business
+that ranks its cleaners by review score and lets them claim "preferred
+properties" — came out of a brainstorming conversation with the agent before
+any code existed, working through what a two-role, real internal tool for a
+small business would actually need: how reviews get entered, what happens
+when a cleaner doesn't have enough reviews yet, what a promotion or demotion
+actually does to an existing pick list, what happens when two cleaners try
+to claim the same property at the same moment. That conversation is written
+up as a single design document,
+[`docs/superpowers/specs/2026-10-05-cleaner-performance-system-design.md`](docs/superpowers/specs/2026-10-05-cleaner-performance-system-design.md),
+committed in
+[`1154a4a`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/1154a4ad71d10c1fc9a1e0306f8fb96b1fee199b)
+right after the scaffold landed in
+[`79f0f4d`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/79f0f4d49f28a6e9586fc055b733a85bd076ab94).
+That document is the actual contract: the data model, the scoring rule (drop
+the single lowest review, require five reviews before a cleaner is scored at
+all), the 15/10 leaderboard cut, the slot caps and which slots a demotion
+takes away first, and the exact API surface. Nothing below the design-doc
+level was decided by the agent alone; every rule in it was a question put to
+me as the client, not an assumption.
 
-`pnpm check:evidence` checks that this comment is gone and that every commit you
-link exists in this repo. Whether the account is any good is the marker's call.
+## Turning the design into tasks
+
+Once the design held still, it got split into an epic: one directory per
+deliverable, with one task file per unit of work that can be built and
+reviewed on its own — auth and session handling, the scoring and ranking
+engine, the picks/claims API with its race condition, the frontend screens
+for each role, and this documentation task. Task files carry their own
+`depends_on` and `conflicts_with` fields so that work on different files can
+run in parallel while anything touching the same file (the server entry
+point, say) is forced into sequence, and each build task gets handed to its
+own sub-agent working in a shared git worktree, one branch, reporting back
+through its own `status` field and a short update note rather than a shared
+chat transcript.
+
+That task breakdown lives under `.claude/epics/cleaner-performance/` in this
+repo, but `.claude/` itself is gitignored — it's machine-local working state
+for the agent, not something that ships, and there's nothing there for a
+marker to click into. So rather than point at it as a link, the honest
+account is this paragraph: the work was decomposed into roughly ten tasks
+before any of them started, task files recorded what "done" means for each
+one up front, and this file and the commit history are the parts of that
+process actually meant to be legible from outside.
+
+## Stack decision
+
+**Context.** The app needs one small, always-on-ish HTTP server, a
+WebSocket channel for the real-time layer coming in crit 9, and persistence
+that survives a restart on a single 256MB Fly machine with one volume. The
+course template is already TypeScript end to end, with vitest wired up for
+both `spec/` and local tests.
+
+**Decision.** Node.js + TypeScript + Fastify + `better-sqlite3` + `ws`.
+
+**Alternatives considered.**
+
+- *Deno + Fresh.* Deno's permissions model and built-in TypeScript are
+  appealing, and Fresh's island architecture is a reasonable fit for a
+  small admin-style UI. It was set aside because it would mean running two
+  TypeScript toolchains side by side — the course's existing vitest/tsc
+  setup for `spec/`, and Deno's own test runner and import story for
+  everything else — for a project with exactly one developer and a
+  three-week budget. That's a cost with no matching benefit here; Deno's
+  sandboxing matters most when running untrusted code, which this app
+  never does.
+- *Python + FastAPI.* FastAPI's automatic validation and its own async
+  story are genuinely nice, and `sqlite3` is in the standard library. It
+  was set aside for two reasons: the `spec/` harness that checks the two
+  course-level invariants is TypeScript/vitest, so a Python app means
+  bridging two languages at the one seam that's graded; and a Python image
+  with an ASGI server plus its dependency tree is harder to keep small
+  than a single-binary-feeling Node + better-sqlite3 image on a 256MB
+  machine.
+
+**Why this one wins.** `better-sqlite3` is synchronous, which matches this
+app's actual concurrency shape — one tiny Fly machine, requests arriving one
+at a time in practice — and makes the "first DB commit wins" race on a pick
+claim a plain `UNIQUE` constraint instead of hand-rolled locking. Fastify
+is a thin, well-typed layer over Node's HTTP server, not a framework with
+opinions to fight. `ws` is the smallest thing that does a WebSocket
+broadcast, which is all crit 9 needs. None of this needs a second runtime,
+a second test story, or a bigger image than the volume budget allows.
+
+**Consequences.** Everything stays inside one language and one test
+runner, which is the main point; the cost is that `better-sqlite3`'s
+synchronous calls would become a real bottleneck under genuine concurrent
+load, which this app will never see — a handful of cleaners checking a
+leaderboard is not a load-bearing claim this stack has to survive.
+
+## Where this actually stands
+
+This file is being written early, alongside the design doc and the task
+breakdown, before most of the build tasks have landed. The scoring,
+ranking, picks, and auth pieces described above are specified, not yet
+verified end to end against a running app, and the real-time layer is
+deliberately out of scope for crit 8 (the brief allows changes to land on
+reload this week; the WebSocket push lands in crit 9 without changing the
+data model). This account will be re-read against the actual commit history
+before the crit and corrected wherever the build diverged from the plan —
+that re-check is part of what "done" means for this task, not an
+afterthought.
