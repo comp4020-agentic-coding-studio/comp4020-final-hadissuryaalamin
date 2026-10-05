@@ -85,6 +85,7 @@ button {
 button:hover { border-color: currentColor; }
 button.primary { border-color: currentColor; font-weight: 600; }
 button.danger { color: var(--danger); border-color: var(--danger); }
+button.icon-btn { padding: 0.3rem 0.5rem; line-height: 1; font-size: 1rem; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .status { min-height: 1.3em; font-size: 0.9rem; }

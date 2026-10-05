@@ -17,6 +17,7 @@
 
     <nav class="tabs">
       <a href="/admin.html">Dashboard</a>
+      <a href="/cleaners.html">Cleaners</a>
       <a href="/properties.html" aria-current="true">Properties</a>
       <a href="/reviews.html">Reviews</a>
     </nav>
@@ -102,7 +103,7 @@
           <td>${property.owner ? escapeHtml(property.owner) : '<span class="muted">unclaimed</span>'}</td>
           <td>
             <button type="button" data-edit="${property.id}">Edit</button>
-            <button type="button" class="danger" data-delete="${property.id}">Delete</button>
+            <button type="button" class="danger icon-btn" data-delete="${property.id}" title="Delete" aria-label="Delete">🗑</button>
           </td>
         `;
         tr.querySelector("[data-edit]").addEventListener("click", () => startEditProperty(tr, property));

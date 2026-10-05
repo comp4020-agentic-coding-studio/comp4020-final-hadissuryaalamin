@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cleaners</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Cleaners</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <a href="/admin.html">Dashboard</a>
+      <a href="/cleaners.html" aria-current="true">Cleaners</a>
+      <a href="/properties.html">Properties</a>
+      <a href="/reviews.html">Reviews</a>
+    </nav>
+
+    <section id="cleaners-section">
+      <form id="add-cleaner-form" class="inline-form">
+        <label>Username <input type="text" name="username" required /></label>
+        <label>Password <input type="password" name="password" required /></label>
+        <button type="submit" class="primary">Create account</button>
+      </form>
+      <p id="cleaner-status" class="status" role="status"></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th><th>Rank</th><th class="num">Score</th>
+            <th>Preferred properties</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="cleaners-body"></tbody>
+      </table>
+    </section>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const cleanersBody = document.getElementById("cleaners-body");
+      const cleanerStatus = document.getElementById("cleaner-status");
+
+      function setStatus(el, text, kind) {
+        el.textContent = text;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 403) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        return res;
+      }
+
+      async function confirmAdmin() {
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 200) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        whoami.textContent = "admin";
+      }
+
+      async function loadCleaners() {
+        const res = await api("/api/leaderboard");
+        return res.json();
+      }
+
+      async function loadProperties() {
+        const res = await api("/api/properties");
+        return res.json();
+      }
+
+      function renderCleaners(cleaners, properties) {
+        const byOwner = new Map();
+        for (const property of properties) {
+          if (!property.owner) continue;
+          if (!byOwner.has(property.owner)) byOwner.set(property.owner, []);
+          byOwner.get(property.owner).push(property.name);
+        }
+
+        cleanersBody.innerHTML = "";
+        for (const cleaner of cleaners) {
+          const tr = document.createElement("tr");
+          const scoreText =
+            cleaner.score === null || cleaner.score === undefined ? "—" : cleaner.score.toFixed(2);
+          const owned = byOwner.get(cleaner.username) ?? [];
+          const propsText = owned.length
+            ? owned.map(escapeHtml).join(", ")
+            : '<span class="muted">none</span>';
+          tr.innerHTML = `
+            <td>${escapeHtml(cleaner.username)}</td>
+            <td>
+              <select data-rank>
+                <option value="legend">legend</option>
+                <option value="awesome">awesome</option>
+                <option value="normal">normal</option>
+              </select>
+            </td>
+            <td class="num">${scoreText}</td>
+            <td>${propsText}</td>
+            <td>
+              <button type="button" class="danger icon-btn" data-delete title="Delete" aria-label="Delete">🗑</button>
+            </td>
+          `;
+          tr.querySelector("[data-rank]").value = cleaner.rank;
+          tr.querySelector("[data-rank]").addEventListener("change", (event) =>
+            setRank(cleaner.cleaner_id, event.target.value),
+          );
+          tr.querySelector("[data-delete]").addEventListener("click", () =>
+            deleteCleaner(cleaner.cleaner_id, cleaner.username),
+          );
+          cleanersBody.appendChild(tr);
+        }
+      }
+
+      async function setRank(cleanerId, rank) {
+        setStatus(cleanerStatus, "Updating rank…", "");
+        try {
+          const res = await api(`/api/cleaners/${cleanerId}/rank`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ rank }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(cleanerStatus, body.error ?? "Could not update rank.", "error");
+            return;
+          }
+          setStatus(cleanerStatus, "Rank updated.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(cleanerStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      async function deleteCleaner(cleanerId, username) {
+        if (!confirm(`Delete cleaner "${username}"? This removes their reviews and picks too.`)) return;
+        setStatus(cleanerStatus, "Deleting…", "");
+        try {
+          const res = await api(`/api/cleaners/${cleanerId}`, { method: "DELETE" });
+          if (!res.ok && res.status !== 204) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(cleanerStatus, body.error ?? "Could not delete.", "error");
+            return;
+          }
+          setStatus(cleanerStatus, "Deleted.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(cleanerStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      document.getElementById("add-cleaner-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const data = new FormData(form);
+        setStatus(cleanerStatus, "Creating…", "");
+        try {
+          const res = await api("/api/cleaners", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username: data.get("username"), password: data.get("password") }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(cleanerStatus, body.error ?? "Could not create account.", "error");
+            return;
+          }
+          const created = await res.json();
+          form.reset();
+          setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
+          await refreshAll();
+        } catch {
+          setStatus(cleanerStatus, "Could not reach the server.", "error");
+        }
+      });
+
+      async function refreshAll() {
+        const [cleaners, properties] = await Promise.all([loadCleaners(), loadProperties()]);
+        renderCleaners(cleaners, properties);
+      }
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      (async () => {
+        try {
+          await confirmAdmin();
+          await refreshAll();
+        } catch (err) {
+          console.error(err);
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -17,6 +17,7 @@
 
     <nav class="tabs">
       <a href="/admin.html" aria-current="true">Dashboard</a>
+      <a href="/cleaners.html">Cleaners</a>
       <a href="/properties.html">Properties</a>
       <a href="/reviews.html">Reviews</a>
     </nav>
@@ -38,36 +39,14 @@
 
       <section id="actions-card" class="card">
         <h2>Quick actions</h2>
-
-        <h3>Create cleaner account</h3>
-        <form id="add-cleaner-form" class="inline-form">
-          <label>Username <input type="text" name="username" required /></label>
-          <label>Password <input type="password" name="password" required /></label>
-          <button type="submit" class="primary">Create account</button>
-        </form>
-        <p id="cleaner-status" class="status" role="status"></p>
-
-        <h3>Manual rank override</h3>
-        <form id="rank-form" class="inline-form">
-          <label>
-            Cleaner
-            <select name="cleaner_id" id="rank-cleaner-select" required></select>
-          </label>
-          <label>
-            New rank
-            <select name="rank" required>
-              <option value="legend">legend</option>
-              <option value="awesome">awesome</option>
-              <option value="normal">normal</option>
-            </select>
-          </label>
-          <button type="submit" class="primary">Set rank</button>
-        </form>
-        <p id="rank-status" class="status" role="status"></p>
-
-        <h3>More</h3>
         <p class="muted">
-          Manage the property list on <a href="/properties.html">Properties</a>.
+          Create accounts, edit rank, or delete a cleaner on
+          <a href="/cleaners.html">Cleaners</a>.
+        </p>
+        <p class="muted">
+          Add, edit, or delete units on <a href="/properties.html">Properties</a>.
+        </p>
+        <p class="muted">
           Submit this month's star ratings (one by one or as a CSV) on
           <a href="/reviews.html">Reviews</a>.
         </p>
@@ -78,18 +57,8 @@
 
     <script>
       const whoami = document.getElementById("whoami");
-      const cleanerStatus = document.getElementById("cleaner-status");
-      const rankCleanerSelect = document.getElementById("rank-cleaner-select");
-      const rankStatus = document.getElementById("rank-status");
       const leaderboardBody = document.getElementById("leaderboard-body");
       const summary = document.getElementById("summary");
-
-      let cleaners = []; // [{cleaner_id, username, rank, score}]
-
-      function setStatus(el, text, kind) {
-        el.textContent = text;
-        el.className = "status" + (kind ? " " + kind : "");
-      }
 
       function escapeHtml(value) {
         const div = document.createElement("div");
@@ -127,8 +96,6 @@
       }
 
       async function loadProperties() {
-        // Read-only here: the Cleaners card groups by owner, but property
-        // management itself lives on /properties.html now.
         const res = await api("/api/properties");
         return res.json();
       }
@@ -165,87 +132,20 @@
         }
       }
 
-      function populateRankSelect() {
-        const previousValue = rankCleanerSelect.value;
-        rankCleanerSelect.innerHTML = cleaners
-          .map((c) => `<option value="${c.cleaner_id}">${escapeHtml(c.username)} (${c.rank})</option>`)
-          .join("");
-        if (previousValue && cleaners.some((c) => String(c.cleaner_id) === previousValue)) {
-          rankCleanerSelect.value = previousValue;
-        }
-      }
-
-      async function loadCleanersIntoSelects() {
-        cleaners = await loadLeaderboard();
-        populateRankSelect();
-      }
-
-      function renderSummary(properties, cleanerList) {
+      function renderSummary(properties, cleaners) {
         const claimed = properties.filter((p) => p.owner).length;
-        const cleanerWord = cleanerList.length === 1 ? "cleaner" : "cleaners";
+        const cleanerWord = cleaners.length === 1 ? "cleaner" : "cleaners";
         const propertyWord = properties.length === 1 ? "property" : "properties";
         summary.textContent =
-          `${cleanerList.length} ${cleanerWord} · ${properties.length} ${propertyWord} ` +
+          `${cleaners.length} ${cleanerWord} · ${properties.length} ${propertyWord} ` +
           `(${claimed} claimed, ${properties.length - claimed} unclaimed)`;
       }
 
       async function refreshAll() {
-        const [properties] = await Promise.all([loadProperties(), loadCleanersIntoSelects()]);
+        const [properties, cleaners] = await Promise.all([loadProperties(), loadLeaderboard()]);
         renderLeaderboard(cleaners, properties);
         renderSummary(properties, cleaners);
       }
-
-      document.getElementById("add-cleaner-form").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const form = event.target;
-        const data = new FormData(form);
-        setStatus(cleanerStatus, "Creating…", "");
-        try {
-          const res = await api("/api/cleaners", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ username: data.get("username"), password: data.get("password") }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            setStatus(cleanerStatus, body.error ?? "Could not create account.", "error");
-            return;
-          }
-          const created = await res.json();
-          form.reset();
-          setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
-          await refreshAll();
-        } catch {
-          setStatus(cleanerStatus, "Could not reach the server.", "error");
-        }
-      });
-
-      document.getElementById("rank-form").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const cleanerId = rankCleanerSelect.value;
-        const rank = event.target.rank.value;
-        if (!cleanerId) {
-          setStatus(rankStatus, "Create a cleaner account first.", "error");
-          return;
-        }
-        setStatus(rankStatus, "Updating…", "");
-        try {
-          const res = await api(`/api/cleaners/${cleanerId}/rank`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ rank }),
-          });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            setStatus(rankStatus, body.error ?? "Could not update rank.", "error");
-            return;
-          }
-          setStatus(rankStatus, "Rank updated.", "ok");
-          await refreshAll();
-        } catch {
-          setStatus(rankStatus, "Could not reach the server.", "error");
-        }
-      });
 
       document.getElementById("logout").addEventListener("click", async () => {
         await fetch("/logout", { method: "POST" });

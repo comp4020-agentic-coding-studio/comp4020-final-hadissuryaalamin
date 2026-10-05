@@ -207,6 +207,34 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
     },
   );
 
+  app.delete<{ Params: { id: string } }>(
+    "/api/cleaners/:id",
+    adminOnly,
+    async (request, reply) => {
+      const cleanerId = Number(request.params.id);
+      const existing = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(cleanerId) as
+        | CleanerRow
+        | undefined;
+      if (!existing) {
+        return reply.code(404).send({ error: "Not found" });
+      }
+
+      // Children first (no ON DELETE CASCADE on these FKs), then the
+      // leaderboard is recomputed over the now-smaller cleaner pool —
+      // removing someone can shift the legend/awesome cap boundary.
+      const run = db.transaction((id: number) => {
+        db.prepare("DELETE FROM picks WHERE cleaner_id = ?").run(id);
+        db.prepare("DELETE FROM reviews WHERE cleaner_id = ?").run(id);
+        db.prepare("DELETE FROM cleaners WHERE user_id = ?").run(id);
+        db.prepare("DELETE FROM users WHERE id = ?").run(id);
+        recomputeAndApply(db);
+      });
+      run(cleanerId);
+
+      return reply.code(204).send();
+    },
+  );
+
   app.get("/api/reviews/summary", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
     const periodRow = db.prepare("SELECT MAX(period) AS period FROM reviews").get() as {
       period: string | null;
