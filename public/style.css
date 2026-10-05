@@ -118,19 +118,24 @@ footer { margin-top: 2rem; font-size: 0.85rem; }
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   gap: 1.25rem;
-  align-items: start;
+  align-items: stretch;
 }
 @media (max-width: 48rem) {
   .dashboard-grid { grid-template-columns: 1fr; }
 }
 
 .card {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 0.4rem;
   padding: 1rem 1.1rem;
 }
 .card > h2 { border-bottom: 1px dashed var(--border); padding-bottom: 0.35rem; }
-.card-scroll { max-height: 22rem; overflow-y: auto; }
+/* Inner scrolling region, not the whole card: the two dashboard cards
+   stretch to match height (.dashboard-grid), and this is what lets the
+   cleaners table scroll within that height instead of growing past it. */
+.card-scroll { flex: 1; min-height: 12rem; max-height: 22rem; overflow-y: auto; }
 .card-scroll table { font-size: 0.9rem; }
 .card-scroll thead th {
   position: sticky;
