@@ -43,14 +43,12 @@ own sub-agent working in a shared git worktree, one branch, reporting back
 through its own `status` field and a short update note rather than a shared
 chat transcript.
 
-That task breakdown lives under `.claude/epics/cleaner-performance/` in this
-repo, but `.claude/` itself is gitignored — it's machine-local working state
-for the agent, not something that ships, and there's nothing there for a
-marker to click into. So rather than point at it as a link, the honest
-account is this paragraph: the work was decomposed into roughly ten tasks
-before any of them started, task files recorded what "done" means for each
-one up front, and this file and the commit history are the parts of that
-process actually meant to be legible from outside.
+That task breakdown lives under `.claude/epics/cleaner-performance/`, but
+`.claude/` is gitignored — machine-local working state, not something that
+ships. So rather than link to it, the honest account is this paragraph: the
+work split into nine tasks before any of them started, each with its own
+file scope and a written definition of "done," and this file plus the
+commit history are what's actually legible from outside.
 
 ## Stack decision
 
@@ -91,21 +89,32 @@ opinions to fight. `ws` is the smallest thing that does a WebSocket
 broadcast, which is all crit 9 needs. None of this needs a second runtime,
 a second test story, or a bigger image than the volume budget allows.
 
-**Consequences.** Everything stays inside one language and one test
-runner, which is the main point; the cost is that `better-sqlite3`'s
-synchronous calls would become a real bottleneck under genuine concurrent
-load, which this app will never see — a handful of cleaners checking a
-leaderboard is not a load-bearing claim this stack has to survive.
+**Consequences.** One language, one test runner. `better-sqlite3`'s
+synchronous calls would bottleneck under real concurrent load, but a
+handful of cleaners checking a leaderboard never produces that load.
 
 ## Where this actually stands
 
-This file is being written early, alongside the design doc and the task
-breakdown, before most of the build tasks have landed. The scoring,
-ranking, picks, and auth pieces described above are specified, not yet
-verified end to end against a running app, and the real-time layer is
-deliberately out of scope for crit 8 (the brief allows changes to land on
-reload this week; the WebSocket push lands in crit 9 without changing the
-data model). This account will be re-read against the actual commit history
-before the crit and corrected wherever the build diverged from the plan —
-that re-check is part of what "done" means for this task, not an
-afterthought.
+All nine build tasks landed, in the dependency order the task files set:
+DB schema, then auth and the ranking engine in parallel, then the admin and
+cleaner API routes, then the Fastify server bootstrap and a real Dockerfile,
+then the frontend, then the HTTP-contract tests. `pnpm check` is green
+(typecheck, 74 colocated unit tests, 6 contract tests against a running
+instance), and the Docker image was built and smoke-tested locally —
+including confirming `/data/app.db` actually lands on the volume mount
+path — before any Fly deploy. The build diverged from the plan in a few
+small, logged ways: `spec/ranking.test.ts` moved to `src/ranking/` (the
+scoring functions are pure and don't need a running server, which `spec/`
+requires); CI never set the seed-admin environment variables, so its
+check job would have 401'd on every admin-gated test — found and fixed
+rather than worked around; and the frontend went through a second,
+client-directed pass after the first build — splitting one long admin
+page into a Dashboard/Cleaners/Properties/Reviews set, adding a CSV
+review-upload path and a monthly summary endpoint, and fixing a type-scale
+issue the design-review hook flagged. The real-time layer stays out of
+scope for this crit, as the brief allows: changes land on reload this
+week, and the WebSocket push is crit 9's job without touching the data
+model above. Dummy data (30 cleaners, 255 properties) was seeded through the
+real API, partly to exercise the endpoints and partly to check the
+15/legend, 10/awesome split lands exactly where the design doc says — it
+did, unprompted, stronger evidence than a unit test run in isolation.
