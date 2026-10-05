@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Admin dashboard</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <section id="properties-section">
+      <h2>Properties</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Address</th><th>Owner</th><th></th></tr>
+        </thead>
+        <tbody id="properties-body"></tbody>
+      </table>
+      <p id="properties-status" class="status" role="status"></p>
+      <form id="add-property-form" class="inline-form">
+        <label>Name <input type="text" name="name" required /></label>
+        <label>Address <input type="text" name="address" required /></label>
+        <button type="submit" class="primary">Add property</button>
+      </form>
+    </section>
+
+    <section id="cleaners-section">
+      <h2>Create cleaner account</h2>
+      <form id="add-cleaner-form" class="inline-form">
+        <label>Username <input type="text" name="username" required /></label>
+        <label>Password <input type="password" name="password" required /></label>
+        <button type="submit" class="primary">Create account</button>
+      </form>
+      <p id="cleaner-status" class="status" role="status"></p>
+    </section>
+
+    <section id="reviews-section">
+      <h2>Monthly review batch</h2>
+      <p class="muted">
+        Add one row per review (a cleaner can appear more than once). A
+        cleaner needs at least 5 reviews in the current period to be scored.
+      </p>
+      <div id="review-rows"></div>
+      <div class="inline-form">
+        <button type="button" id="add-review-row">Add review row</button>
+        <button type="button" id="submit-reviews" class="primary">Submit batch</button>
+      </div>
+      <p id="reviews-status" class="status" role="status"></p>
+    </section>
+
+    <section id="rank-section">
+      <h2>Manual rank override</h2>
+      <form id="rank-form" class="inline-form">
+        <label>
+          Cleaner
+          <select name="cleaner_id" id="rank-cleaner-select" required></select>
+        </label>
+        <label>
+          New rank
+          <select name="rank" required>
+            <option value="legend">legend</option>
+            <option value="awesome">awesome</option>
+            <option value="normal">normal</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">Set rank</button>
+      </form>
+      <p id="rank-status" class="status" role="status"></p>
+    </section>
+
+    <section id="leaderboard-section">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead>
+          <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </section>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const propertiesBody = document.getElementById("properties-body");
+      const propertiesStatus = document.getElementById("properties-status");
+      const cleanerStatus = document.getElementById("cleaner-status");
+      const reviewRows = document.getElementById("review-rows");
+      const reviewsStatus = document.getElementById("reviews-status");
+      const rankCleanerSelect = document.getElementById("rank-cleaner-select");
+      const rankStatus = document.getElementById("rank-status");
+      const leaderboardBody = document.getElementById("leaderboard-body");
+
+      let cleaners = []; // [{cleaner_id, username, rank, score}]
+      let reviewRowCount = 0;
+
+      function setStatus(el, text, kind) {
+        el.textContent = text;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 403) {
+          // Signed in but not an admin — wrong dashboard.
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        return res;
+      }
+
+      async function confirmAdmin() {
+        // GET /api/me is 404 ("Not a cleaner") for an authenticated admin,
+        // 200 for a cleaner session, 401 for no session.
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 200) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        whoami.textContent = "admin";
+      }
+
+      async function loadProperties() {
+        const res = await api("/api/properties");
+        return res.json();
+      }
+
+      async function loadLeaderboard() {
+        const res = await api("/api/leaderboard");
+        return res.json();
+      }
+
+      function renderProperties(properties) {
+        propertiesBody.innerHTML = "";
+        for (const property of properties) {
+          const tr = document.createElement("tr");
+          tr.dataset.id = property.id;
+          renderPropertyRow(tr, property);
+          propertiesBody.appendChild(tr);
+        }
+      }
+
+      function renderPropertyRow(tr, property) {
+        tr.innerHTML = `
+          <td>${escapeHtml(property.name)}</td>
+          <td>${escapeHtml(property.address)}</td>
+          <td>${property.owner ? escapeHtml(property.owner) : '<span class="muted">unclaimed</span>'}</td>
+          <td>
+            <button type="button" data-edit="${property.id}">Edit</button>
+            <button type="button" class="danger" data-delete="${property.id}">Delete</button>
+          </td>
+        `;
+        tr.querySelector("[data-edit]").addEventListener("click", () => startEditProperty(tr, property));
+        tr.querySelector("[data-delete]").addEventListener("click", () => deleteProperty(property.id));
+      }
+
+      function startEditProperty(tr, property) {
+        tr.innerHTML = `
+          <td colspan="3">
+            <div class="edit-fields">
+              <input type="text" value="${escapeHtml(property.name)}" data-field="name" />
+              <input type="text" value="${escapeHtml(property.address)}" data-field="address" />
+            </div>
+          </td>
+          <td>
+            <button type="button" class="primary" data-save>Save</button>
+            <button type="button" data-cancel>Cancel</button>
+          </td>
+        `;
+        tr.querySelector("[data-save]").addEventListener("click", () => saveProperty(tr, property.id));
+        tr.querySelector("[data-cancel]").addEventListener("click", () => refreshAll());
+      }
+
+      async function saveProperty(tr, id) {
+        const name = tr.querySelector('[data-field="name"]').value;
+        const address = tr.querySelector('[data-field="address"]').value;
+        setStatus(propertiesStatus, "Saving…", "");
+        try {
+          const res = await api(`/api/properties/${id}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name, address }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(propertiesStatus, body.error ?? "Could not save.", "error");
+            return;
+          }
+          setStatus(propertiesStatus, "Saved.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(propertiesStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      async function deleteProperty(id) {
+        if (!confirm("Delete this property?")) return;
+        setStatus(propertiesStatus, "Deleting…", "");
+        try {
+          const res = await api(`/api/properties/${id}`, { method: "DELETE" });
+          if (!res.ok && res.status !== 204) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(propertiesStatus, body.error ?? "Could not delete.", "error");
+            return;
+          }
+          setStatus(propertiesStatus, "Deleted.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(propertiesStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      document.getElementById("add-property-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const data = new FormData(form);
+        setStatus(propertiesStatus, "Adding…", "");
+        try {
+          const res = await api("/api/properties", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: data.get("name"), address: data.get("address") }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(propertiesStatus, body.error ?? "Could not add property.", "error");
+            return;
+          }
+          form.reset();
+          setStatus(propertiesStatus, "Added.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(propertiesStatus, "Could not reach the server.", "error");
+        }
+      });
+
+      document.getElementById("add-cleaner-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const data = new FormData(form);
+        setStatus(cleanerStatus, "Creating…", "");
+        try {
+          const res = await api("/api/cleaners", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ username: data.get("username"), password: data.get("password") }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(cleanerStatus, body.error ?? "Could not create account.", "error");
+            return;
+          }
+          const created = await res.json();
+          form.reset();
+          setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
+          await loadCleanersIntoSelects();
+        } catch {
+          setStatus(cleanerStatus, "Could not reach the server.", "error");
+        }
+      });
+
+      function addReviewRow() {
+        const rowId = `review-row-${reviewRowCount++}`;
+        const row = document.createElement("div");
+        row.className = "review-row";
+        row.id = rowId;
+        const options = cleaners
+          .map((c) => `<option value="${c.cleaner_id}">${escapeHtml(c.username)}</option>`)
+          .join("");
+        row.innerHTML = `
+          <select data-cleaner>${options}</select>
+          <select data-stars>
+            <option value="1">1 star</option>
+            <option value="2">2 stars</option>
+            <option value="3">3 stars</option>
+            <option value="4">4 stars</option>
+            <option value="5" selected>5 stars</option>
+          </select>
+          <button type="button" data-remove>Remove</button>
+        `;
+        row.querySelector("[data-remove]").addEventListener("click", () => row.remove());
+        reviewRows.appendChild(row);
+      }
+
+      document.getElementById("add-review-row").addEventListener("click", addReviewRow);
+
+      document.getElementById("submit-reviews").addEventListener("click", async () => {
+        const rows = [...reviewRows.querySelectorAll(".review-row")];
+        if (rows.length === 0) {
+          setStatus(reviewsStatus, "Add at least one review row first.", "error");
+          return;
+        }
+        const items = rows.map((row) => ({
+          cleaner_id: Number(row.querySelector("[data-cleaner]").value),
+          stars: Number(row.querySelector("[data-stars]").value),
+        }));
+        setStatus(reviewsStatus, "Submitting…", "");
+        try {
+          const res = await api("/api/reviews/batch", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(items),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(reviewsStatus, body.error ?? "Could not submit batch.", "error");
+            return;
+          }
+          const result = await res.json();
+          reviewRows.innerHTML = "";
+          setStatus(reviewsStatus, `Submitted ${result.count} review(s) for period ${result.period}.`, "ok");
+          await refreshAll();
+        } catch {
+          setStatus(reviewsStatus, "Could not reach the server.", "error");
+        }
+      });
+
+      document.getElementById("rank-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const cleanerId = rankCleanerSelect.value;
+        const rank = event.target.rank.value;
+        if (!cleanerId) {
+          setStatus(rankStatus, "Create a cleaner account first.", "error");
+          return;
+        }
+        setStatus(rankStatus, "Updating…", "");
+        try {
+          const res = await api(`/api/cleaners/${cleanerId}/rank`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ rank }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(rankStatus, body.error ?? "Could not update rank.", "error");
+            return;
+          }
+          setStatus(rankStatus, "Rank updated.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(rankStatus, "Could not reach the server.", "error");
+        }
+      });
+
+      function renderLeaderboard(entries) {
+        leaderboardBody.innerHTML = "";
+        for (const entry of entries) {
+          const tr = document.createElement("tr");
+          const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          tr.innerHTML = `
+            <td>${escapeHtml(entry.username)}</td>
+            <td><span class="pill">${entry.rank}</span></td>
+            <td class="num">${scoreText}</td>
+          `;
+          leaderboardBody.appendChild(tr);
+        }
+      }
+
+      function populateRankSelect() {
+        const previousValue = rankCleanerSelect.value;
+        rankCleanerSelect.innerHTML = cleaners
+          .map((c) => `<option value="${c.cleaner_id}">${escapeHtml(c.username)} (${c.rank})</option>`)
+          .join("");
+        if (previousValue && cleaners.some((c) => String(c.cleaner_id) === previousValue)) {
+          rankCleanerSelect.value = previousValue;
+        }
+      }
+
+      async function loadCleanersIntoSelects() {
+        cleaners = await loadLeaderboard();
+        populateRankSelect();
+        renderLeaderboard(cleaners);
+      }
+
+      async function refreshAll() {
+        const [properties] = await Promise.all([loadProperties(), loadCleanersIntoSelects()]);
+        renderProperties(properties);
+      }
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      (async () => {
+        try {
+          await confirmAdmin();
+          await refreshAll();
+          if (reviewRows.children.length === 0) addReviewRow();
+        } catch (err) {
+          console.error(err);
+        }
+      })();
+    </script>
+  </body>
+</html>
