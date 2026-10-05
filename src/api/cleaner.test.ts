@@ -65,7 +65,7 @@ describe("GET /api/me", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("returns rank, score (null under 5 reviews), empty picks, and full cap as slots_remaining", async () => {
+  it("returns username, rank, score (null under 5 reviews), empty picks, and full cap as slots_remaining", async () => {
     const db = createConnection(":memory:");
     const app = buildApp(db);
     const cleanerId = insertCleaner(db, "cleaner-1", "awesome");
@@ -77,6 +77,7 @@ describe("GET /api/me", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
+      username: "cleaner-1",
       rank: "awesome",
       score: null,
       picks: [],

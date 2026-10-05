@@ -15,39 +15,49 @@
       </div>
     </header>
 
-    <section id="me-section">
+    <section id="me-section" class="card">
       <h2>My standing</h2>
-      <p id="me-summary" class="muted">Loading…</p>
+      <dl class="standing" id="me-summary" aria-live="polite">
+        <div><dt>Rank</dt><dd id="me-rank">…</dd></div>
+        <div><dt>Score</dt><dd id="me-score">…</dd></div>
+        <div><dt>Free slots</dt><dd id="me-slots">…</dd></div>
+      </dl>
       <h3>My picks</h3>
-      <table>
-        <thead>
-          <tr><th>Slot</th><th>Property</th><th>Address</th><th></th></tr>
-        </thead>
-        <tbody id="my-picks-body"></tbody>
-      </table>
-      <p id="picks-empty" class="muted" hidden>No properties claimed yet.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Slot</th><th>Property</th><th>Address</th><th><span class="visually-hidden">Actions</span></th></tr>
+          </thead>
+          <tbody id="my-picks-body"></tbody>
+        </table>
+      </div>
+      <p id="picks-empty" class="muted" hidden>No properties claimed yet. Claim one from the list below.</p>
     </section>
 
-    <section id="properties-section">
+    <section id="properties-section" class="card">
       <h2>Unclaimed properties</h2>
       <p id="claim-status" class="status" role="status"></p>
-      <table>
-        <thead>
-          <tr><th>Name</th><th>Address</th><th></th></tr>
-        </thead>
-        <tbody id="unclaimed-body"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Address</th><th><span class="visually-hidden">Actions</span></th></tr>
+          </thead>
+          <tbody id="unclaimed-body"></tbody>
+        </table>
+      </div>
       <p id="unclaimed-empty" class="muted" hidden>Nothing unclaimed right now.</p>
     </section>
 
-    <section id="leaderboard-section">
+    <section id="leaderboard-section" class="card">
       <h2>Leaderboard</h2>
-      <table>
-        <thead>
-          <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
-        </thead>
-        <tbody id="leaderboard-body"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <footer><a href="/readme/">About this app</a></footer>
@@ -61,6 +71,7 @@
       const unclaimedEmpty = document.getElementById("unclaimed-empty");
       const leaderboardBody = document.getElementById("leaderboard-body");
       const claimStatus = document.getElementById("claim-status");
+      let myUsername = null;
 
       function setStatus(el, text, kind) {
         el.textContent = text;
@@ -85,9 +96,15 @@
         }
         const me = await res.json();
         whoami.textContent = me.username ? `${me.username} (cleaner)` : "cleaner";
-        const scoreText = me.score === null || me.score === undefined ? "not yet scored" : me.score.toFixed(2);
-        meSummary.textContent =
-          `Rank: ${me.rank} · Score: ${scoreText} · Slots remaining: ${me.slots_remaining}`;
+        myUsername = me.username;
+        const scored = me.score !== null && me.score !== undefined;
+        meSummary.querySelector("#me-rank").innerHTML =
+          `<span class="pill ${escapeHtml(me.rank)}">${escapeHtml(me.rank)}</span>`;
+        meSummary.querySelector("#me-score").innerHTML = scored
+          ? `${me.score.toFixed(2)} <small>/ 5</small>`
+          : `<small>Not scored yet (needs 5 reviews)</small>`;
+        meSummary.querySelector("#me-slots").innerHTML =
+          `${me.slots_remaining} <small>of ${me.slots_remaining + me.picks.length}</small>`;
         return me;
       }
 
@@ -113,7 +130,7 @@
             <td>${pick.slot}</td>
             <td>${property ? escapeHtml(property.name) : "(removed property)"}</td>
             <td>${property ? escapeHtml(property.address) : ""}</td>
-            <td><button type="button" data-release="${pick.id}">Release</button></td>
+            <td class="actions"><button type="button" data-release="${pick.id}">Release</button></td>
           `;
           myPicksBody.appendChild(tr);
         }
@@ -132,7 +149,7 @@
           tr.innerHTML = `
             <td>${escapeHtml(property.name)}</td>
             <td>${escapeHtml(property.address)}</td>
-            <td><button type="button" class="primary" data-claim="${property.id}" ${canClaim ? "" : "disabled"}>Claim</button></td>
+            <td class="actions"><button type="button" class="primary" data-claim="${property.id}" ${canClaim ? "" : "disabled"}>Claim</button></td>
           `;
           unclaimedBody.appendChild(tr);
         }
@@ -149,9 +166,11 @@
         for (const entry of entries) {
           const tr = document.createElement("tr");
           const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          const isMe = myUsername !== null && entry.username === myUsername;
+          if (isMe) tr.className = "is-me";
           tr.innerHTML = `
-            <td>${escapeHtml(entry.username)}</td>
-            <td><span class="pill">${entry.rank}</span></td>
+            <td>${escapeHtml(entry.username)}${isMe ? '<span class="you">You</span>' : ""}</td>
+            <td><span class="pill ${escapeHtml(entry.rank)}">${escapeHtml(entry.rank)}</span></td>
             <td class="num">${scoreText}</td>
           `;
           leaderboardBody.appendChild(tr);

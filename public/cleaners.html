@@ -22,22 +22,30 @@
       <a href="/reviews.html">Reviews</a>
     </nav>
 
-    <section id="cleaners-section">
+    <section class="card">
+      <h2>Create a cleaner account</h2>
       <form id="add-cleaner-form" class="inline-form">
-        <label>Username <input type="text" name="username" required /></label>
-        <label>Password <input type="password" name="password" required /></label>
+        <label>Username <input type="text" name="username" autocomplete="off" required /></label>
+        <label>Password <input type="password" name="password" autocomplete="new-password" required /></label>
         <button type="submit" class="primary">Create account</button>
       </form>
       <p id="cleaner-status" class="status" role="status"></p>
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th><th>Rank</th><th class="num">Score</th>
-            <th>Preferred properties</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="cleaners-body"></tbody>
-      </table>
+    </section>
+
+    <section id="cleaners-section" class="card">
+      <h2>All cleaners</h2>
+      <p class="muted">Changing a rank here is a manual override. The next review batch recomputes ranks and can overwrite it.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th><th>Rank</th><th class="num">Score</th>
+              <th>Preferred properties</th><th><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="cleaners-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <footer><a href="/readme/">About this app</a></footer>
@@ -46,6 +54,8 @@
       const whoami = document.getElementById("whoami");
       const cleanersBody = document.getElementById("cleaners-body");
       const cleanerStatus = document.getElementById("cleaner-status");
+      const TRASH_ICON =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 
       function setStatus(el, text, kind) {
         el.textContent = text;
@@ -114,7 +124,7 @@
           tr.innerHTML = `
             <td>${escapeHtml(cleaner.username)}</td>
             <td>
-              <select data-rank>
+              <select data-rank aria-label="Rank for ${escapeHtml(cleaner.username)}">
                 <option value="legend">legend</option>
                 <option value="awesome">awesome</option>
                 <option value="normal">normal</option>
@@ -122,8 +132,8 @@
             </td>
             <td class="num">${scoreText}</td>
             <td>${propsText}</td>
-            <td>
-              <button type="button" class="danger icon-btn" data-delete title="Delete" aria-label="Delete">🗑</button>
+            <td class="actions">
+              <button type="button" class="danger icon-btn" data-delete title="Delete ${escapeHtml(cleaner.username)}" aria-label="Delete ${escapeHtml(cleaner.username)}">${TRASH_ICON}</button>
             </td>
           `;
           tr.querySelector("[data-rank]").value = cleaner.rank;
