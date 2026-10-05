@@ -15,6 +15,8 @@
       </div>
     </header>
 
+    <p id="summary" class="muted"></p>
+
     <section id="properties-section">
       <h2>Properties</h2>
       <table>
@@ -97,6 +99,7 @@
       const rankCleanerSelect = document.getElementById("rank-cleaner-select");
       const rankStatus = document.getElementById("rank-status");
       const leaderboardBody = document.getElementById("leaderboard-body");
+      const summary = document.getElementById("summary");
 
       let cleaners = []; // [{cleaner_id, username, rank, score}]
       let reviewRowCount = 0;
@@ -393,9 +396,19 @@
         renderLeaderboard(cleaners);
       }
 
+      function renderSummary(properties, cleanerList) {
+        const claimed = properties.filter((p) => p.owner).length;
+        const cleanerWord = cleanerList.length === 1 ? "cleaner" : "cleaners";
+        const propertyWord = properties.length === 1 ? "property" : "properties";
+        summary.textContent =
+          `${cleanerList.length} ${cleanerWord} · ${properties.length} ${propertyWord} ` +
+          `(${claimed} claimed, ${properties.length - claimed} unclaimed)`;
+      }
+
       async function refreshAll() {
         const [properties] = await Promise.all([loadProperties(), loadCleanersIntoSelects()]);
         renderProperties(properties);
+        renderSummary(properties, cleaners);
       }
 
       document.getElementById("logout").addEventListener("click", async () => {
