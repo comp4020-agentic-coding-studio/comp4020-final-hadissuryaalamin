@@ -30,4 +30,7 @@ submit a review batch, watch the leaderboard split, claim a property as
 that cleaner, log out and back in and find it still there — before trusting
 the deploy. One real gap, caught rather than missed: CI never seeded an
 admin account, so its own checks would have 401'd silently; fixed in the
-workflow, not worked around in the test.
+workflow, not worked around in the test. The live `*.fly.dev` URL itself
+got the same walkthrough after deploying — login, create a cleaner,
+promote them, claim a property, log out, log back in, pick still there —
+then that smoke-test data was removed so the shipped app starts clean.
