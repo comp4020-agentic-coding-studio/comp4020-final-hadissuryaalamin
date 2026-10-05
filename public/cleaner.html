@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cleaner dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Cleaner dashboard</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <section id="me-section">
+      <h2>My standing</h2>
+      <p id="me-summary" class="muted">Loading…</p>
+      <h3>My picks</h3>
+      <table>
+        <thead>
+          <tr><th>Slot</th><th>Property</th><th>Address</th><th></th></tr>
+        </thead>
+        <tbody id="my-picks-body"></tbody>
+      </table>
+      <p id="picks-empty" class="muted" hidden>No properties claimed yet.</p>
+    </section>
+
+    <section id="properties-section">
+      <h2>Unclaimed properties</h2>
+      <p id="claim-status" class="status" role="status"></p>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Address</th><th></th></tr>
+        </thead>
+        <tbody id="unclaimed-body"></tbody>
+      </table>
+      <p id="unclaimed-empty" class="muted" hidden>Nothing unclaimed right now.</p>
+    </section>
+
+    <section id="leaderboard-section">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead>
+          <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </section>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const meSummary = document.getElementById("me-summary");
+      const myPicksBody = document.getElementById("my-picks-body");
+      const picksEmpty = document.getElementById("picks-empty");
+      const unclaimedBody = document.getElementById("unclaimed-body");
+      const unclaimedEmpty = document.getElementById("unclaimed-empty");
+      const leaderboardBody = document.getElementById("leaderboard-body");
+      const claimStatus = document.getElementById("claim-status");
+
+      function setStatus(el, text, kind) {
+        el.textContent = text;
+        el.className = "status" + (kind ? " " + kind : "");
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        return res;
+      }
+
+      async function loadMe() {
+        const res = await api("/api/me");
+        if (res.status === 404) {
+          // Authenticated but not a cleaner account — wrong dashboard.
+          location.href = "/admin.html";
+          throw new Error("not a cleaner");
+        }
+        const me = await res.json();
+        whoami.textContent = me.username ? `${me.username} (cleaner)` : "cleaner";
+        const scoreText = me.score === null || me.score === undefined ? "not yet scored" : me.score.toFixed(2);
+        meSummary.textContent =
+          `Rank: ${me.rank} · Score: ${scoreText} · Slots remaining: ${me.slots_remaining}`;
+        return me;
+      }
+
+      async function loadProperties() {
+        const res = await api("/api/properties");
+        return res.json();
+      }
+
+      async function loadLeaderboard() {
+        const res = await api("/api/leaderboard");
+        return res.json();
+      }
+
+      function renderMyPicks(me, properties) {
+        myPicksBody.innerHTML = "";
+        const byId = new Map(properties.map((p) => [p.id, p]));
+        const picks = [...me.picks].sort((a, b) => a.slot - b.slot);
+        picksEmpty.hidden = picks.length > 0;
+        for (const pick of picks) {
+          const property = byId.get(pick.property_id);
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${pick.slot}</td>
+            <td>${property ? escapeHtml(property.name) : "(removed property)"}</td>
+            <td>${property ? escapeHtml(property.address) : ""}</td>
+            <td><button type="button" data-release="${pick.id}">Release</button></td>
+          `;
+          myPicksBody.appendChild(tr);
+        }
+        myPicksBody.querySelectorAll("[data-release]").forEach((btn) => {
+          btn.addEventListener("click", () => releasePick(btn.dataset.release));
+        });
+      }
+
+      function renderUnclaimed(properties, me) {
+        unclaimedBody.innerHTML = "";
+        const unclaimed = properties.filter((p) => !p.owner);
+        unclaimedEmpty.hidden = unclaimed.length > 0;
+        const canClaim = me.slots_remaining > 0;
+        for (const property of unclaimed) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${escapeHtml(property.name)}</td>
+            <td>${escapeHtml(property.address)}</td>
+            <td><button type="button" class="primary" data-claim="${property.id}" ${canClaim ? "" : "disabled"}>Claim</button></td>
+          `;
+          unclaimedBody.appendChild(tr);
+        }
+        unclaimedBody.querySelectorAll("[data-claim]").forEach((btn) => {
+          btn.addEventListener("click", () => claimProperty(btn.dataset.claim));
+        });
+        if (!canClaim && unclaimed.length > 0) {
+          setStatus(claimStatus, "No free slots — release a pick or wait for a rank change to claim more.", "");
+        }
+      }
+
+      function renderLeaderboard(entries) {
+        leaderboardBody.innerHTML = "";
+        for (const entry of entries) {
+          const tr = document.createElement("tr");
+          const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          tr.innerHTML = `
+            <td>${escapeHtml(entry.username)}</td>
+            <td><span class="pill">${entry.rank}</span></td>
+            <td class="num">${scoreText}</td>
+          `;
+          leaderboardBody.appendChild(tr);
+        }
+      }
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      async function refreshAll() {
+        const [me, properties, leaderboard] = await Promise.all([loadMe(), loadProperties(), loadLeaderboard()]);
+        renderMyPicks(me, properties);
+        renderUnclaimed(properties, me);
+        renderLeaderboard(leaderboard);
+      }
+
+      async function claimProperty(propertyId) {
+        setStatus(claimStatus, "Claiming…", "");
+        try {
+          const res = await api("/api/picks", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ property_id: Number(propertyId) }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(claimStatus, body.error ?? "Could not claim that property.", "error");
+            await refreshAll();
+            return;
+          }
+          setStatus(claimStatus, "Claimed.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(claimStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      async function releasePick(pickId) {
+        setStatus(claimStatus, "Releasing…", "");
+        try {
+          const res = await api(`/api/picks/${pickId}`, { method: "DELETE" });
+          if (!res.ok && res.status !== 204) {
+            const body = await res.json().catch(() => ({}));
+            setStatus(claimStatus, body.error ?? "Could not release that pick.", "error");
+            return;
+          }
+          setStatus(claimStatus, "Released.", "ok");
+          await refreshAll();
+        } catch {
+          setStatus(claimStatus, "Could not reach the server.", "error");
+        }
+      }
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      refreshAll().catch((err) => console.error(err));
+    </script>
+  </body>
+</html>

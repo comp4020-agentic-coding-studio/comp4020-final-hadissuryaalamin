@@ -5,11 +5,14 @@
   "scripts": {
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm typecheck && pnpm test",
+    "check": "pnpm typecheck && pnpm test:unit && pnpm test",
     "check:evidence": "node scripts/check-evidence.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "start": "node src/server.ts"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^24.0.0",
     "jsdom": "^30.1.0",
@@ -18,5 +21,12 @@
   },
   "engines": {
     "pnpm": ">=11"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.5",
+    "marked": "^18.0.14"
   }
 }

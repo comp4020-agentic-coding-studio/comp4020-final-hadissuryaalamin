@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Admin dashboard</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <a href="/admin.html" aria-current="true">Dashboard</a>
+      <a href="/cleaners.html">Cleaners</a>
+      <a href="/properties.html">Properties</a>
+      <a href="/reviews.html">Reviews</a>
+    </nav>
+
+    <p id="summary" class="muted"></p>
+
+    <div class="dashboard-grid">
+      <section id="cleaners-card" class="card">
+        <h2>Cleaners</h2>
+        <div class="card-scroll">
+          <table>
+            <thead>
+              <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th><th>Preferred properties</th></tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="actions-card" class="card">
+        <h2>Quick actions</h2>
+        <p class="muted">
+          Create accounts, edit rank, or delete a cleaner on
+          <a href="/cleaners.html">Cleaners</a>.
+        </p>
+        <p class="muted">
+          Add, edit, or delete units on <a href="/properties.html">Properties</a>.
+        </p>
+        <p class="muted">
+          Submit this month's star ratings (one by one or as a CSV) on
+          <a href="/reviews.html">Reviews</a>.
+        </p>
+      </section>
+    </div>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const leaderboardBody = document.getElementById("leaderboard-body");
+      const summary = document.getElementById("summary");
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 403) {
+          // Signed in but not an admin — wrong dashboard.
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        return res;
+      }
+
+      async function confirmAdmin() {
+        // GET /api/me is 404 ("Not a cleaner") for an authenticated admin,
+        // 200 for a cleaner session, 401 for no session.
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 200) {
+          location.href = "/cleaner.html";
+          throw new Error("not an admin");
+        }
+        whoami.textContent = "admin";
+      }
+
+      async function loadProperties() {
+        const res = await api("/api/properties");
+        return res.json();
+      }
+
+      async function loadLeaderboard() {
+        const res = await api("/api/leaderboard");
+        return res.json();
+      }
+
+      function renderLeaderboard(entries, properties) {
+        // Group properties by owner so each cleaner's row lists theirs.
+        const byOwner = new Map();
+        for (const property of properties ?? []) {
+          if (!property.owner) continue;
+          if (!byOwner.has(property.owner)) byOwner.set(property.owner, []);
+          byOwner.get(property.owner).push(property.name);
+        }
+
+        leaderboardBody.innerHTML = "";
+        for (const entry of entries) {
+          const tr = document.createElement("tr");
+          const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          const owned = byOwner.get(entry.username) ?? [];
+          const propsText = owned.length
+            ? owned.map(escapeHtml).join(", ")
+            : '<span class="muted">none</span>';
+          tr.innerHTML = `
+            <td>${escapeHtml(entry.username)}</td>
+            <td><span class="pill">${entry.rank}</span></td>
+            <td class="num">${scoreText}</td>
+            <td>${propsText}</td>
+          `;
+          leaderboardBody.appendChild(tr);
+        }
+      }
+
+      function renderSummary(properties, cleaners) {
+        const claimed = properties.filter((p) => p.owner).length;
+        const cleanerWord = cleaners.length === 1 ? "cleaner" : "cleaners";
+        const propertyWord = properties.length === 1 ? "property" : "properties";
+        summary.textContent =
+          `${cleaners.length} ${cleanerWord} · ${properties.length} ${propertyWord} ` +
+          `(${claimed} claimed, ${properties.length - claimed} unclaimed)`;
+      }
+
+      async function refreshAll() {
+        const [properties, cleaners] = await Promise.all([loadProperties(), loadLeaderboard()]);
+        renderLeaderboard(cleaners, properties);
+        renderSummary(properties, cleaners);
+      }
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      (async () => {
+        try {
+          await confirmAdmin();
+          await refreshAll();
+        } catch (err) {
+          console.error(err);
+        }
+      })();
+    </script>
+  </body>
+</html>
