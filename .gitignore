@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.log
+data/
 
 # editor and OS junk
 .DS_Store
