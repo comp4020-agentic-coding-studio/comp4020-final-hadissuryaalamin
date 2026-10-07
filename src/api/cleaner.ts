@@ -10,6 +10,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireAuth } from "../auth/index.ts";
 import { activePeriod, capForRank, computeScore, type PeriodedReview, type Rank } from "../ranking/index.ts";
 import type { CleanerRow, PickRow, PropertyRow } from "../db/types.ts";
+import { broadcast } from "../realtime/broadcast.ts";
 
 /** Order used to sort the leaderboard response by tier (legend first). */
 const RANK_ORDER: Record<Rank, number> = { legend: 0, awesome: 1, normal: 2 };
@@ -111,6 +112,7 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
       const row = db
         .prepare("SELECT * FROM picks WHERE cleaner_id = ? AND property_id = ?")
         .get(userId, propertyId) as PickRow;
+      broadcast({ type: "pick:claimed", payload: { property_id: propertyId } });
       return reply.code(201).send(row);
     },
   );
@@ -129,6 +131,7 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
         return reply.code(403).send({ error: "Forbidden" });
       }
       db.prepare("DELETE FROM picks WHERE id = ?").run(id);
+      broadcast({ type: "pick:released", payload: { property_id: pick.property_id } });
       return reply.code(204).send();
     },
   );

@@ -1,13 +1,22 @@
 import fastify, { type FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConnection } from "../db/connection.ts";
 import { createSessionToken, SESSION_COOKIE_NAME } from "../auth/session.ts";
 import type { Role } from "../db/types.ts";
 import cleanerRoutes from "./cleaner.ts";
+import { broadcast } from "../realtime/broadcast.ts";
+
+vi.mock("../realtime/broadcast.ts", () => ({
+  broadcast: vi.fn(),
+}));
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-secret";
+});
+
+beforeEach(() => {
+  vi.mocked(broadcast).mockClear();
 });
 
 // Every test opens its own throwaway `:memory:` DB (migrate() runs as part
@@ -214,6 +223,33 @@ describe("POST /api/picks", () => {
       payload: { property_id: propertyId },
     });
     expect(second.statusCode).toBe(409);
+
+    // The race winner's claim broadcasts; the race loser's 409 must stay silent.
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "pick:claimed",
+      payload: { property_id: propertyId },
+    });
+  });
+
+  it("broadcasts pick:claimed with the property_id on a successful claim", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+    const cleanerId = insertCleaner(db, "cleaner-12", "awesome");
+    const propertyId = insertProperty(db, "Broadcast House");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/picks",
+      headers: { cookie: cookieHeader(cleanerId, "cleaner") },
+      payload: { property_id: propertyId },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "pick:claimed",
+      payload: { property_id: propertyId },
+    });
   });
 
   it("400s a missing/invalid property_id", async () => {
@@ -261,8 +297,14 @@ describe("DELETE /api/picks/:id", () => {
     });
     const pickId = claim.json().id;
 
+    vi.mocked(broadcast).mockClear(); // isolate release assertion from the claim's own broadcast
     const del = await app.inject({ method: "DELETE", url: `/api/picks/${pickId}`, headers: { cookie } });
     expect(del.statusCode).toBe(204);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "pick:released",
+      payload: { property_id: propertyId },
+    });
 
     const me = await app.inject({ method: "GET", url: "/api/me", headers: { cookie } });
     expect(me.json().slots_remaining).toBe(3);
