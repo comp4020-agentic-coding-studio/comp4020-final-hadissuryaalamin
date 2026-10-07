@@ -44,6 +44,16 @@ function extractText(content: Anthropic.ContentBlock[]): string {
  * the API.
  */
 export async function runAssistant(message: string, ctx: RunToolContext): Promise<string> {
+  // Test-only stub (task 006/008): short-circuits before the Anthropic client
+  // is ever constructed, so spec/'s HTTP contract tests can exercise the full
+  // POST /api/assistant route — auth, validation, response shape — against a
+  // real running server without spending real course budget or needing
+  // ANTHROPIC_AUTH_TOKEN at all. Only the server process spec/ boots sets
+  // this; never set it for a real deploy.
+  if (process.env.ASSISTANT_TEST_STUB === "1") {
+    return "stubbed reply for tests";
+  }
+
   const client = new Anthropic({
     baseURL: process.env.ANTHROPIC_BASE_URL,
     apiKey: process.env.ANTHROPIC_AUTH_TOKEN,
