@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import { marked } from "marked";
+import { WebSocketServer } from "ws";
 import { db } from "./db/index.ts";
 import type { UserRow } from "./db/types.ts";
 import {
@@ -23,6 +24,7 @@ import {
   buildClearSessionCookieHeader,
   seedAdminIfMissing,
 } from "./auth/index.ts";
+import { registerClient } from "./realtime/broadcast.ts";
 import adminRoutes from "./api/admin.ts";
 import cleanerRoutes from "./api/cleaner.ts";
 
@@ -58,6 +60,33 @@ export function buildApp(): ReturnType<typeof Fastify> {
     if (session) {
       request.session = session;
     }
+  });
+
+  // WebSocket upgrade for live updates (src/realtime/broadcast.ts, task 001).
+  // Hooked directly onto the raw HTTP server's `upgrade` event — this is
+  // outside Fastify's request pipeline entirely, so the session cookie is
+  // read and verified by hand, the same way the onRequest hook above does
+  // it: same trust boundary as every HTTP route, no new auth path. No valid
+  // session (or the wrong path) and the socket is destroyed instead of
+  // completing the handshake.
+  const wss = new WebSocketServer({ noServer: true });
+  app.server.on("upgrade", (request, socket, head) => {
+    const { pathname } = new URL(request.url ?? "", "http://localhost");
+    if (pathname !== "/ws") {
+      socket.destroy();
+      return;
+    }
+
+    const token = readSessionCookie(request.headers.cookie);
+    const session = verifySessionToken(token);
+    if (!session) {
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (client) => {
+      registerClient(client);
+    });
   });
 
   // Static assets: task 007 lands its real frontend in public/; wiring this
