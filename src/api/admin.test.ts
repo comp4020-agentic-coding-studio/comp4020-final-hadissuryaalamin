@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fastify from "fastify";
 import type Database from "better-sqlite3";
 // Import createConnection from connection.ts directly (not db/index.ts),
@@ -8,10 +8,22 @@ import type Database from "better-sqlite3";
 import { createConnection } from "../db/connection.ts";
 import { createSessionToken, SESSION_COOKIE_NAME } from "../auth/index.ts";
 import type { CleanerRow, PickRow } from "../db/types.ts";
+
+// Spy on the realtime broadcast module — these tests assert admin.ts fires
+// it on rank-changing routes, without standing up a real WebSocket.
+vi.mock("../realtime/broadcast.ts", () => ({
+  broadcast: vi.fn(),
+  registerClient: vi.fn(),
+}));
+import { broadcast } from "../realtime/broadcast.ts";
 import adminRoutes from "./admin.ts";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-secret";
+});
+
+beforeEach(() => {
+  vi.mocked(broadcast).mockClear();
 });
 
 // Every test opens its own throwaway `:memory:` DB (see src/db/schema.test.ts
@@ -298,5 +310,76 @@ describe("admin API — rank override", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("admin API — realtime broadcast", () => {
+  it("broadcasts ranks:changed once per recomputeAndApply call from POST /api/reviews/batch", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const star = insertCleaner(db, "star-cleaner", "legend");
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/reviews/batch",
+      payload: [{ cleaner_id: star, stars: 5 }],
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: "ranks:changed" });
+  });
+
+  it("broadcasts ranks:changed once per recomputeAndApply call from DELETE /api/cleaners/:id", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const cleanerId = insertCleaner(db, "to-delete");
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/cleaners/${cleanerId}`,
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: "ranks:changed" });
+  });
+
+  it("broadcasts ranks:changed once for a POST /api/cleaners/:id/rank override", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const cleanerId = insertCleaner(db, "override-me", "legend");
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/cleaners/${cleanerId}/rank`,
+      payload: { rank: "awesome" },
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({ type: "ranks:changed" });
+  });
+
+  it("does not broadcast when a request is rejected before any rank change", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/cleaners/999/rank",
+      payload: { rank: "legend" },
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });

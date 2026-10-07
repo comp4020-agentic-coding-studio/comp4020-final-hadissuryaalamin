@@ -7,6 +7,7 @@
 import type Database from "better-sqlite3";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createCleanerAccount, requireRole } from "../auth/index.ts";
+import { broadcast } from "../realtime/broadcast.ts";
 import {
   activePeriod,
   capForRank,
@@ -64,6 +65,8 @@ function recomputeAndApply(db: Database.Database): void {
   for (const entry of leaderboard) {
     applyCapDrops(db, entry.cleanerId, entry.rank);
   }
+
+  broadcast({ type: "ranks:changed" });
 }
 
 /** Drops any picks beyond the new cap for one cleaner's new rank. */
@@ -201,6 +204,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
         applyCapDrops(db, cleanerId, newRank);
       });
       run(rank as Rank);
+      broadcast({ type: "ranks:changed" });
 
       const row = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(cleanerId) as CleanerRow;
       return reply.send(row);
