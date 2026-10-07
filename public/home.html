@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assistant</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      /* Chat-specific layout only — everything else reuses style.css tokens. */
+      body.chat-body {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        padding-bottom: 0;
+      }
+      main.chat-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        margin-bottom: 1rem;
+      }
+      #chat-log {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding: 0.25rem 0.1rem 0.75rem;
+      }
+      .bubble {
+        max-width: 34rem;
+        padding: 0.6rem 0.85rem;
+        border-radius: 0.8rem;
+        font-size: 0.95rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .bubble.user {
+        align-self: flex-end;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border-bottom-right-radius: 0.2rem;
+      }
+      .bubble.assistant {
+        align-self: flex-start;
+        background: var(--surface-sunk);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 0.2rem;
+      }
+      .bubble.assistant.error {
+        background: var(--danger-soft);
+        border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+        color: var(--danger);
+      }
+      .bubble.pending {
+        color: var(--text-muted);
+        font-style: italic;
+      }
+      #chat-empty {
+        margin: auto;
+        text-align: center;
+      }
+      form#chat-form {
+        display: flex;
+        flex-direction: row;
+        gap: 0.6rem;
+        align-items: flex-end;
+        flex-shrink: 0;
+      }
+      form#chat-form textarea {
+        flex: 1;
+        resize: none;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.4rem;
+        background: var(--surface);
+        color: var(--text);
+        padding: 0.6rem 0.7rem;
+        font: inherit;
+        line-height: 1.4;
+        max-height: 8rem;
+      }
+    </style>
+  </head>
+  <body class="chat-body">
+    <header class="topbar">
+      <h1>Assistant</h1>
+      <div class="who">
+        <span id="whoami">loading…</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="nav-links"></nav>
+
+    <main class="chat-main card">
+      <div id="chat-log">
+        <p id="chat-empty" class="muted">
+          Ask about your score, the leaderboard, or properties.
+        </p>
+      </div>
+    </main>
+
+    <form id="chat-form">
+      <label class="visually-hidden" for="chat-input">Message</label>
+      <textarea
+        id="chat-input"
+        rows="1"
+        placeholder="Ask a question…"
+        autocomplete="off"
+        required
+      ></textarea>
+      <button type="submit" class="primary">Send</button>
+    </form>
+
+    <footer><a href="/readme/">About this app</a></footer>
+
+    <script>
+      const whoami = document.getElementById("whoami");
+      const navLinks = document.getElementById("nav-links");
+      const chatLog = document.getElementById("chat-log");
+      const chatEmpty = document.getElementById("chat-empty");
+      const chatForm = document.getElementById("chat-form");
+      const chatInput = document.getElementById("chat-input");
+
+      function escapeHtml(value) {
+        const div = document.createElement("div");
+        div.textContent = value ?? "";
+        return div.innerHTML;
+      }
+
+      function addBubble(text, kind) {
+        chatEmpty.hidden = true;
+        const div = document.createElement("div");
+        div.className = "bubble " + kind;
+        div.textContent = text;
+        chatLog.appendChild(div);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        return div;
+      }
+
+      function renderNav(role) {
+        const pages =
+          role === "admin"
+            ? [
+                ["/admin.html", "Dashboard"],
+                ["/cleaners.html", "Cleaners"],
+                ["/properties.html", "Properties"],
+                ["/reviews.html", "Reviews"],
+              ]
+            : [["/cleaner.html", "My dashboard"]];
+        navLinks.innerHTML = pages
+          .map(([href, label]) => `<a href="${href}">${escapeHtml(label)}</a>`)
+          .join("");
+      }
+
+      // Same role-detection pattern as every other page: GET /api/me is 200
+      // for a cleaner session, 404 ("Not a cleaner") for an authenticated
+      // admin, 401 for no session at all.
+      async function detectRole() {
+        const res = await fetch("/api/me");
+        if (res.status === 401) {
+          location.href = "/";
+          throw new Error("not signed in");
+        }
+        if (res.status === 200) {
+          whoami.textContent = "cleaner";
+          renderNav("cleaner");
+          return;
+        }
+        whoami.textContent = "admin";
+        renderNav("admin");
+      }
+
+      async function sendMessage(message) {
+        addBubble(message, "user");
+        const pending = addBubble("Thinking…", "bubble assistant pending");
+        chatInput.disabled = true;
+        chatForm.querySelector("button[type=submit]").disabled = true;
+        try {
+          const res = await fetch("/api/assistant", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ message }),
+          });
+          if (res.status === 401) {
+            location.href = "/";
+            return;
+          }
+          pending.remove();
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            addBubble(body.error ?? "The assistant could not answer that.", "assistant error");
+            return;
+          }
+          const body = await res.json();
+          addBubble(body.reply ?? "", "assistant");
+        } catch {
+          pending.remove();
+          addBubble("Could not reach the server.", "assistant error");
+        } finally {
+          chatInput.disabled = false;
+          chatForm.querySelector("button[type=submit]").disabled = false;
+          chatInput.focus();
+        }
+      }
+
+      chatForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const message = chatInput.value.trim();
+        if (!message) return;
+        chatInput.value = "";
+        sendMessage(message).catch((err) => console.error(err));
+      });
+
+      chatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          chatForm.requestSubmit();
+        }
+      });
+
+      document.getElementById("logout").addEventListener("click", async () => {
+        await fetch("/logout", { method: "POST" });
+        location.href = "/";
+      });
+
+      detectRole().catch((err) => console.error(err));
+    </script>
+  </body>
+</html>
