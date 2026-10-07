@@ -37,6 +37,7 @@ jobs:
           docker build -t app .
           docker run -d --init --name app -p 8080:8080 -e PORT=8080 \
             -e SEED_ADMIN_USERNAME=ci-admin -e SEED_ADMIN_PASSWORD=ci-admin-password-1 \
+            -e ASSISTANT_TEST_STUB=1 \
             --tmpfs /data app
       - name: Run the spec
         run: pnpm check
@@ -44,6 +45,7 @@ jobs:
           APP_URL: http://localhost:8080
           SEED_ADMIN_USERNAME: ci-admin
           SEED_ADMIN_PASSWORD: ci-admin-password-1
+          ASSISTANT_TEST_STUB: "1"
       - name: Show the app's output
         # what the container printed, so a crash or slow boot is visible
         if: ${{ failure() }}
