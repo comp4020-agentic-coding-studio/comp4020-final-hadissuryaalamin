@@ -24,6 +24,7 @@
     "pnpm": ">=11"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@fastify/static": "^10.1.5",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
