@@ -68,6 +68,7 @@
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const leaderboardBody = document.getElementById("leaderboard-body");
@@ -220,6 +221,13 @@
         await fetch("/logout", { method: "POST" });
         location.href = "/";
       });
+
+      // Live updates (public/realtime.js): the leaderboard, the per-cleaner
+      // "preferred properties" list and the claimed/unclaimed summary all
+      // come out of refreshAll(), so any of these events just re-runs it.
+      onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
 
       (async () => {
         try {

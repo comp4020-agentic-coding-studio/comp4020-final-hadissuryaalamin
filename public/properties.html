@@ -46,6 +46,7 @@
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const propertiesBody = document.getElementById("properties-body");
@@ -208,6 +209,12 @@
         await fetch("/logout", { method: "POST" });
         location.href = "/";
       });
+
+      // Live updates (public/realtime.js): this page lists every property
+      // regardless of owner, so a claim/release elsewhere never removes a
+      // row — it just needs the "Claimed by" column refreshed.
+      onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
 
       (async () => {
         try {

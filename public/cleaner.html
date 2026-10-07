@@ -62,6 +62,7 @@
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const meSummary = document.getElementById("me-summary");
@@ -231,6 +232,16 @@
         await fetch("/logout", { method: "POST" });
         location.href = "/";
       });
+
+      // Live updates (public/realtime.js): a claim/release anywhere re-runs
+      // the same refreshAll() the page loads with, so /api/me +
+      // /api/properties are re-fetched and myPicks/unclaimed/leaderboard all
+      // re-render from fresh data. ranks:changed only affects the
+      // leaderboard + my rank, but refreshAll() is cheap and keeps this in
+      // sync with the one source of truth instead of a second code path.
+      onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));
 
       refreshAll().catch((err) => console.error(err));
     </script>

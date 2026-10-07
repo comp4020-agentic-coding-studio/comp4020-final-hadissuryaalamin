@@ -50,6 +50,7 @@
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const cleanersBody = document.getElementById("cleaners-body");
@@ -218,6 +219,10 @@
         await fetch("/logout", { method: "POST" });
         location.href = "/";
       });
+
+      // Live updates (public/realtime.js): a rank recompute/override
+      // anywhere re-runs the same refreshAll() the page loads with.
+      onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));
 
       (async () => {
         try {
