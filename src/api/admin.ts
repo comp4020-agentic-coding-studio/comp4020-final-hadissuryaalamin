@@ -83,6 +83,33 @@ function applyCapDrops(db: Database.Database, cleanerId: number, rank: Rank): vo
   }
 }
 
+/** Body of `GET /api/reviews/summary`: stats for the most recent review period. */
+export function getReviewsSummary(db: Database.Database) {
+  const periodRow = db.prepare("SELECT MAX(period) AS period FROM reviews").get() as {
+    period: string | null;
+  };
+  const period = periodRow.period;
+  if (!period) {
+    return { period: null, total_reviews: 0, cleaners_reviewed: 0, average_stars: null };
+  }
+
+  const stats = db
+    .prepare(
+      "SELECT COUNT(*) AS total, COUNT(DISTINCT cleaner_id) AS cleaners, AVG(stars) AS avg_stars " +
+        "FROM reviews WHERE period = ?",
+    )
+    .get(period) as { total: number; cleaners: number; avg_stars: number | null };
+
+  // Raw average across every review this period — distinct from each
+  // cleaner's own computeScore (which drops their single worst review).
+  return {
+    period,
+    total_reviews: stats.total,
+    cleaners_reviewed: stats.cleaners,
+    average_stars: stats.avg_stars === null ? null : Math.round(stats.avg_stars * 100) / 100,
+  };
+}
+
 export default async function adminRoutes(app: FastifyInstance, opts: { db: Database.Database }): Promise<void> {
   const { db } = opts;
   const adminOnly = { preHandler: requireRole("admin") };
@@ -240,28 +267,6 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
   );
 
   app.get("/api/reviews/summary", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
-    const periodRow = db.prepare("SELECT MAX(period) AS period FROM reviews").get() as {
-      period: string | null;
-    };
-    const period = periodRow.period;
-    if (!period) {
-      return reply.send({ period: null, total_reviews: 0, cleaners_reviewed: 0, average_stars: null });
-    }
-
-    const stats = db
-      .prepare(
-        "SELECT COUNT(*) AS total, COUNT(DISTINCT cleaner_id) AS cleaners, AVG(stars) AS avg_stars " +
-          "FROM reviews WHERE period = ?",
-      )
-      .get(period) as { total: number; cleaners: number; avg_stars: number | null };
-
-    // Raw average across every review this period — distinct from each
-    // cleaner's own computeScore (which drops their single worst review).
-    return reply.send({
-      period,
-      total_reviews: stats.total,
-      cleaners_reviewed: stats.cleaners,
-      average_stars: stats.avg_stars === null ? null : Math.round(stats.avg_stars * 100) / 100,
-    });
+    return reply.send(getReviewsSummary(db));
   });
 }
