@@ -25,6 +25,10 @@ function buildSystemPrompt(role: RunToolContext["role"]): string {
     `You cannot claim or release properties, enter reviews, or change anyone's`,
     `rank yet. If asked to do any of those things, say plainly that you can't`,
     `do that yet — do not attempt a workaround.`,
+    `Reply in plain text only — no markdown (no **bold**, no # headers, no`,
+    `bullet lists with * or -). Replies are shown as plain text, so markdown`,
+    `syntax would show up as literal asterisks and hashes. Use plain`,
+    `sentences or numbered lines ("1. ...", "2. ...") instead.`,
   ].join(" ");
 }
 
