@@ -10,6 +10,7 @@ import type Database from "better-sqlite3";
 // - reviews: id, cleaner_id (FK), stars (1-5), period (YYYY-MM), created_at
 // - properties: id, name, address
 // - picks: id, cleaner_id (FK), property_id (FK, unique), slot (1-5, unique per cleaner_id)
+// - assistant_usage: id, user_id (FK -> users.id), input_tokens, output_tokens, created_at
 const MIGRATIONS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +41,13 @@ const MIGRATIONS: readonly string[] = [
     property_id INTEGER NOT NULL UNIQUE REFERENCES properties(id),
     slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 5),
     UNIQUE (cleaner_id, slot)
+  )`,
+  `CREATE TABLE IF NOT EXISTS assistant_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   )`,
 ];
 

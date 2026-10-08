@@ -20,7 +20,14 @@ describe("db schema", () => {
       )
       .all()
       .map((row) => (row as { name: string }).name);
-    expect(tables).toEqual(["cleaners", "picks", "properties", "reviews", "users"]);
+    expect(tables).toEqual([
+      "assistant_usage",
+      "cleaners",
+      "picks",
+      "properties",
+      "reviews",
+      "users",
+    ]);
 
     // Re-running migrate() against the same connection must be a no-op, not
     // an error (CREATE TABLE IF NOT EXISTS, same statements both times).
