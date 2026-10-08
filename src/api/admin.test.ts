@@ -313,6 +313,60 @@ describe("admin API — rank override", () => {
   });
 });
 
+describe("admin API — assistant usage summary", () => {
+  it("rejects with 401 when there's no session", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+
+    const response = await app.inject({ method: "GET", url: "/api/assistant/usage" });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("rejects a cleaner session with 403", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "cleaner-usage");
+    const app = buildApp(db);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/assistant/usage",
+      headers: { cookie: cookieFor(cleanerId, "cleaner") },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("returns the usage summary for an admin session", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    db.prepare(
+      "INSERT INTO assistant_usage (user_id, input_tokens, output_tokens) VALUES (?, ?, ?)",
+    ).run(adminId, 100, 40);
+    db.prepare(
+      "INSERT INTO assistant_usage (user_id, input_tokens, output_tokens) VALUES (?, ?, ?)",
+    ).run(adminId, 50, 10);
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/assistant/usage",
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      totalRequests: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      since: string | null;
+    };
+    expect(body.totalRequests).toBe(2);
+    expect(body.totalInputTokens).toBe(150);
+    expect(body.totalOutputTokens).toBe(50);
+    expect(typeof body.since).toBe("string");
+  });
+});
+
 describe("admin API — realtime broadcast", () => {
   it("broadcasts ranks:changed once per recomputeAndApply call from POST /api/reviews/batch", async () => {
     const db = createConnection(":memory:");

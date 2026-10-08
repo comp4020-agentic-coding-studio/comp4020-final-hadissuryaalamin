@@ -8,6 +8,7 @@ import type Database from "better-sqlite3";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createCleanerAccount, requireRole } from "../auth/index.ts";
 import { broadcast } from "../realtime/broadcast.ts";
+import { getUsageSummary } from "../assistant/usage.ts";
 import {
   activePeriod,
   capForRank,
@@ -268,5 +269,9 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
 
   app.get("/api/reviews/summary", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.send(getReviewsSummary(db));
+  });
+
+  app.get("/api/assistant/usage", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
+    return reply.send(getUsageSummary(db));
   });
 }
