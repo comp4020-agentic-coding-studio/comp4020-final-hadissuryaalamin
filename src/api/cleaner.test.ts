@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConnection } from "../db/connection.ts";
 import { createSessionToken, SESSION_COOKIE_NAME } from "../auth/session.ts";
 import type { Role } from "../db/types.ts";
-import cleanerRoutes from "./cleaner.ts";
+import cleanerRoutes, { claimProperty, releaseProperty } from "./cleaner.ts";
 import { broadcast } from "../realtime/broadcast.ts";
 
 vi.mock("../realtime/broadcast.ts", () => ({
@@ -410,5 +410,95 @@ describe("GET /api/properties", () => {
     const byId = new Map(body.map((p) => [p.id, p.owner]));
     expect(byId.get(claimed)).toBe("owner-cleaner");
     expect(byId.get(unclaimed)).toBeNull();
+  });
+});
+
+describe("claimProperty", () => {
+  it("returns forbidden when the user has no cleaner row", () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "admin-claim", "admin");
+    const propertyId = insertProperty(db, "No Cleaner Row House");
+
+    const result = claimProperty(db, adminId, propertyId);
+    expect(result).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("returns property-not-found for a missing property", () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-fn-1", "legend");
+
+    const result = claimProperty(db, cleanerId, 9999);
+    expect(result).toEqual({ ok: false, reason: "property-not-found" });
+  });
+
+  it("returns no-free-slot once the rank's cap is used", () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-fn-2", "normal"); // cap 0
+    const propertyId = insertProperty(db, "Cap Zero House");
+
+    const result = claimProperty(db, cleanerId, propertyId);
+    expect(result).toEqual({ ok: false, reason: "no-free-slot" });
+  });
+
+  it("returns already-claimed when the property has a pick", () => {
+    const db = createConnection(":memory:");
+    const owner = insertCleaner(db, "claim-fn-3a", "awesome");
+    const other = insertCleaner(db, "claim-fn-3b", "awesome");
+    const propertyId = insertProperty(db, "Already Claimed House");
+
+    expect(claimProperty(db, owner, propertyId).ok).toBe(true);
+    const result = claimProperty(db, other, propertyId);
+    expect(result).toEqual({ ok: false, reason: "already-claimed" });
+  });
+
+  it("returns ok with the pick row and broadcasts on success", () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-fn-4", "awesome");
+    const propertyId = insertProperty(db, "Success House");
+
+    const result = claimProperty(db, cleanerId, propertyId);
+    expect(result).toEqual({
+      ok: true,
+      pick: { id: expect.any(Number), cleaner_id: cleanerId, property_id: propertyId, slot: 1 },
+    });
+    expect(broadcast).toHaveBeenCalledWith({ type: "pick:claimed", payload: { property_id: propertyId } });
+  });
+});
+
+describe("releaseProperty", () => {
+  it("returns not-found for a missing pick", () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "release-fn-1", "awesome");
+
+    const result = releaseProperty(db, cleanerId, 9999);
+    expect(result).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("returns forbidden when the pick belongs to another cleaner", () => {
+    const db = createConnection(":memory:");
+    const owner = insertCleaner(db, "release-fn-2a", "awesome");
+    const other = insertCleaner(db, "release-fn-2b", "awesome");
+    const propertyId = insertProperty(db, "Not Yours Fn House");
+    const claim = claimProperty(db, owner, propertyId);
+    if (!claim.ok) throw new Error("expected claim to succeed");
+
+    const result = releaseProperty(db, other, claim.pick.id);
+    expect(result).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("returns ok with the pick row and broadcasts on success", () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "release-fn-3", "awesome");
+    const propertyId = insertProperty(db, "Release Fn House");
+    const claim = claimProperty(db, cleanerId, propertyId);
+    if (!claim.ok) throw new Error("expected claim to succeed");
+
+    vi.mocked(broadcast).mockClear();
+    const result = releaseProperty(db, cleanerId, claim.pick.id);
+    expect(result).toEqual({ ok: true, pick: claim.pick });
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "pick:released",
+      payload: { property_id: propertyId },
+    });
   });
 });

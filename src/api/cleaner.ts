@@ -95,6 +95,87 @@ export function getPropertiesList(db: Database.Database) {
   }));
 }
 
+/** Why `claimProperty` refused -- covers every early-return the old inline handler had. */
+export type ClaimFailureReason = "forbidden" | "property-not-found" | "no-free-slot" | "already-claimed";
+
+/** Discriminated result of attempting to claim a property for a cleaner. */
+export type ClaimResult = { ok: true; pick: PickRow } | { ok: false; reason: ClaimFailureReason };
+
+/**
+ * Claims `propertyId` for `userId`, or returns why it couldn't. Broadcasts
+ * `pick:claimed` on success, same as the route always has. Does not check
+ * `role` -- callers (the HTTP route, or an assistant propose tool) are
+ * responsible for that; `"forbidden"` here only covers "no cleaners row".
+ */
+export function claimProperty(db: Database.Database, userId: number, propertyId: number): ClaimResult {
+  const cleaner = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(userId) as
+    | CleanerRow
+    | undefined;
+  if (!cleaner) {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const property = db.prepare("SELECT * FROM properties WHERE id = ?").get(propertyId) as
+    | PropertyRow
+    | undefined;
+  if (!property) {
+    return { ok: false, reason: "property-not-found" };
+  }
+
+  const cap = capForRank(cleaner.rank);
+  const existingPicks = db
+    .prepare("SELECT slot FROM picks WHERE cleaner_id = ?")
+    .all(userId) as { slot: number }[];
+  if (existingPicks.length >= cap) {
+    return { ok: false, reason: "no-free-slot" };
+  }
+
+  const usedSlots = new Set(existingPicks.map((p) => p.slot));
+  let nextSlot = 1;
+  while (usedSlots.has(nextSlot)) nextSlot++;
+
+  // Rely on the DB's unique constraint on picks.property_id to reject a
+  // racing double-claim (409) rather than pre-checking then inserting.
+  try {
+    const insert = db.transaction((slot: number) => {
+      db.prepare("INSERT INTO picks (cleaner_id, property_id, slot) VALUES (?, ?, ?)").run(
+        userId,
+        propertyId,
+        slot,
+      );
+    });
+    insert(nextSlot);
+  } catch {
+    return { ok: false, reason: "already-claimed" };
+  }
+
+  const row = db
+    .prepare("SELECT * FROM picks WHERE cleaner_id = ? AND property_id = ?")
+    .get(userId, propertyId) as PickRow;
+  broadcast({ type: "pick:claimed", payload: { property_id: propertyId } });
+  return { ok: true, pick: row };
+}
+
+/** Why `releaseProperty` refused. */
+export type ReleaseFailureReason = "not-found" | "forbidden";
+
+/** Discriminated result of attempting to release a pick for a cleaner. */
+export type ReleaseResult = { ok: true; pick: PickRow } | { ok: false; reason: ReleaseFailureReason };
+
+/** Releases `pickId` on behalf of `userId`, or returns why it couldn't. Broadcasts `pick:released` on success. */
+export function releaseProperty(db: Database.Database, userId: number, pickId: number): ReleaseResult {
+  const pick = db.prepare("SELECT * FROM picks WHERE id = ?").get(pickId) as PickRow | undefined;
+  if (!pick) {
+    return { ok: false, reason: "not-found" };
+  }
+  if (pick.cleaner_id !== userId) {
+    return { ok: false, reason: "forbidden" };
+  }
+  db.prepare("DELETE FROM picks WHERE id = ?").run(pickId);
+  broadcast({ type: "pick:released", payload: { property_id: pick.property_id } });
+  return { ok: true, pick };
+}
+
 export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Database.Database }): Promise<void> {
   const { db } = opts;
   const authed = { preHandler: requireAuth };
@@ -121,52 +202,23 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
         return reply.code(400).send({ error: "property_id is required" });
       }
 
-      const cleaner = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(userId) as
-        | CleanerRow
-        | undefined;
-      if (!cleaner) {
-        return reply.code(403).send({ error: "Forbidden" });
+      const result = claimProperty(db, userId, propertyId);
+      if (!result.ok) {
+        const status: Record<ClaimFailureReason, number> = {
+          forbidden: 403,
+          "property-not-found": 404,
+          "no-free-slot": 400,
+          "already-claimed": 409,
+        };
+        const message: Record<ClaimFailureReason, string> = {
+          forbidden: "Forbidden",
+          "property-not-found": "Property not found",
+          "no-free-slot": "No free slot",
+          "already-claimed": "Property already claimed",
+        };
+        return reply.code(status[result.reason]).send({ error: message[result.reason] });
       }
-
-      const property = db.prepare("SELECT * FROM properties WHERE id = ?").get(propertyId) as
-        | PropertyRow
-        | undefined;
-      if (!property) {
-        return reply.code(404).send({ error: "Property not found" });
-      }
-
-      const cap = capForRank(cleaner.rank);
-      const existingPicks = db
-        .prepare("SELECT slot FROM picks WHERE cleaner_id = ?")
-        .all(userId) as { slot: number }[];
-      if (existingPicks.length >= cap) {
-        return reply.code(400).send({ error: "No free slot" });
-      }
-
-      const usedSlots = new Set(existingPicks.map((p) => p.slot));
-      let nextSlot = 1;
-      while (usedSlots.has(nextSlot)) nextSlot++;
-
-      // Rely on the DB's unique constraint on picks.property_id to reject a
-      // racing double-claim (409) rather than pre-checking then inserting.
-      try {
-        const insert = db.transaction((slot: number) => {
-          db.prepare("INSERT INTO picks (cleaner_id, property_id, slot) VALUES (?, ?, ?)").run(
-            userId,
-            propertyId,
-            slot,
-          );
-        });
-        insert(nextSlot);
-      } catch {
-        return reply.code(409).send({ error: "Property already claimed" });
-      }
-
-      const row = db
-        .prepare("SELECT * FROM picks WHERE cleaner_id = ? AND property_id = ?")
-        .get(userId, propertyId) as PickRow;
-      broadcast({ type: "pick:claimed", payload: { property_id: propertyId } });
-      return reply.code(201).send(row);
+      return reply.code(201).send(result.pick);
     },
   );
 
@@ -176,15 +228,12 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
     async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = request.session!.user_id;
       const id = Number((request.params as { id: string }).id);
-      const pick = db.prepare("SELECT * FROM picks WHERE id = ?").get(id) as PickRow | undefined;
-      if (!pick) {
-        return reply.code(404).send({ error: "Not found" });
+      const result = releaseProperty(db, userId, id);
+      if (!result.ok) {
+        const status: Record<ReleaseFailureReason, number> = { "not-found": 404, forbidden: 403 };
+        const message: Record<ReleaseFailureReason, string> = { "not-found": "Not found", forbidden: "Forbidden" };
+        return reply.code(status[result.reason]).send({ error: message[result.reason] });
       }
-      if (pick.cleaner_id !== userId) {
-        return reply.code(403).send({ error: "Forbidden" });
-      }
-      db.prepare("DELETE FROM picks WHERE id = ?").run(id);
-      broadcast({ type: "pick:released", payload: { property_id: pick.property_id } });
       return reply.code(204).send();
     },
   );

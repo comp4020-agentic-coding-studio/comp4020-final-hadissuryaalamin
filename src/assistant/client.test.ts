@@ -102,6 +102,8 @@ describe("runAssistant — plain text, no tool use", () => {
       "get_my_status",
       "get_leaderboard",
       "get_properties",
+      "propose_claim_property",
+      "propose_release_property",
     ]);
     expect(call.system).toContain("cleaner");
     expect(call.system.toLowerCase()).toContain("can't");

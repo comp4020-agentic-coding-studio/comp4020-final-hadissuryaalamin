@@ -2,7 +2,17 @@ import type Database from "better-sqlite3";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createConnection } from "../db/connection.ts";
 import type { Role } from "../db/types.ts";
-import { runTool, TOOLS_FOR_ROLE } from "./tools.ts";
+import {
+  runTool,
+  TOOLS_FOR_ROLE,
+  GET_MY_STATUS,
+  GET_LEADERBOARD,
+  GET_PROPERTIES,
+  GET_REVIEWS_SUMMARY,
+  PROPOSE_CLAIM_PROPERTY,
+  PROPOSE_RELEASE_PROPERTY,
+} from "./tools.ts";
+import { getProposal, clearProposal } from "./proposals.ts";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-secret";
@@ -29,10 +39,23 @@ function insertProperty(db: Database.Database, name: string): number {
   return Number(result.lastInsertRowid);
 }
 
+function insertPick(db: Database.Database, cleanerId: number, propertyId: number, slot = 1): number {
+  const result = db
+    .prepare("INSERT INTO picks (cleaner_id, property_id, slot) VALUES (?, ?, ?)")
+    .run(cleanerId, propertyId, slot);
+  return Number(result.lastInsertRowid);
+}
+
 describe("TOOLS_FOR_ROLE", () => {
-  it("gives cleaners status/leaderboard/properties only", () => {
+  it("gives cleaners status/leaderboard/properties/propose-claim/propose-release", () => {
     const names = TOOLS_FOR_ROLE.cleaner.map((t) => t.name);
-    expect(names).toEqual(["get_my_status", "get_leaderboard", "get_properties"]);
+    expect(names).toEqual([
+      "get_my_status",
+      "get_leaderboard",
+      "get_properties",
+      "propose_claim_property",
+      "propose_release_property",
+    ]);
   });
 
   it("gives admins leaderboard/properties/reviews-summary only", () => {
@@ -40,12 +63,27 @@ describe("TOOLS_FOR_ROLE", () => {
     expect(names).toEqual(["get_leaderboard", "get_properties", "get_reviews_summary"]);
   });
 
-  it("uses the empty-object Anthropic input_schema shape for every tool", () => {
-    for (const tool of [...TOOLS_FOR_ROLE.cleaner, ...TOOLS_FOR_ROLE.admin]) {
+  it("uses the empty-object Anthropic input_schema shape for every read-only tool", () => {
+    for (const tool of [GET_MY_STATUS, GET_LEADERBOARD, GET_PROPERTIES, GET_REVIEWS_SUMMARY]) {
       expect(tool.input_schema).toEqual({ type: "object", properties: {} });
+    }
+  });
+
+  it("every tool has a non-empty description", () => {
+    for (const tool of [...TOOLS_FOR_ROLE.cleaner, ...TOOLS_FOR_ROLE.admin]) {
       expect(typeof tool.description).toBe("string");
       expect(tool.description.length).toBeGreaterThan(0);
     }
+  });
+
+  it("propose_claim_property requires an integer property_id", () => {
+    expect(PROPOSE_CLAIM_PROPERTY.input_schema.required).toEqual(["property_id"]);
+    expect(PROPOSE_CLAIM_PROPERTY.input_schema.properties.property_id).toMatchObject({ type: "integer" });
+  });
+
+  it("propose_release_property requires an integer pick_id", () => {
+    expect(PROPOSE_RELEASE_PROPERTY.input_schema.required).toEqual(["pick_id"]);
+    expect(PROPOSE_RELEASE_PROPERTY.input_schema.properties.pick_id).toMatchObject({ type: "integer" });
   });
 });
 
@@ -153,5 +191,165 @@ describe("runTool — role-scoping boundary", () => {
     await expect(
       runTool("delete_everything", { db, role: "cleaner", userId: cleanerId }),
     ).rejects.toThrow();
+  });
+});
+
+describe("runTool — propose_claim_property", () => {
+  it("stores a proposal and returns its description on success", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-tool-1", "awesome");
+    const propertyId = insertProperty(db, "Sunset Villa");
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_claim_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { property_id: propertyId },
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result as string).toContain("Sunset Villa");
+    expect(result as string).toContain("claim-tool-1");
+    expect(getProposal(cleanerId)).toEqual({
+      type: "claim_property",
+      data: { propertyId },
+      description: result,
+    });
+  });
+
+  it("explains and stores nothing when property_id is missing/invalid", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-tool-2", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool("propose_claim_property", { db, role: "cleaner", userId: cleanerId }, {});
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the property doesn't exist", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-tool-3", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_claim_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { property_id: 9999 },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the property is already claimed", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-tool-4a", "awesome");
+    const otherCleanerId = insertCleaner(db, "claim-tool-4b", "awesome");
+    const propertyId = insertProperty(db, "Contested Villa");
+    insertPick(db, otherCleanerId, propertyId, 1);
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_claim_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { property_id: propertyId },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the cleaner has no free slot", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "claim-tool-5", "normal"); // cap 0
+    const propertyId = insertProperty(db, "Lakeside Cabin");
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_claim_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { property_id: propertyId },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the caller has no cleaner profile", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "claim-tool-admin", "admin");
+    const propertyId = insertProperty(db, "No Profile House");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_claim_property",
+      { db, role: "cleaner", userId: adminId },
+      { property_id: propertyId },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+});
+
+describe("runTool — propose_release_property", () => {
+  it("stores a proposal and returns its description on success", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "release-tool-1", "awesome");
+    const propertyId = insertProperty(db, "Hilltop House");
+    const pickId = insertPick(db, cleanerId, propertyId, 1);
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_release_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { pick_id: pickId },
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result as string).toContain("Hilltop House");
+    expect(getProposal(cleanerId)).toEqual({
+      type: "release_property",
+      data: { pickId },
+      description: result,
+    });
+  });
+
+  it("explains and stores nothing when pick_id is missing/invalid", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "release-tool-2", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool("propose_release_property", { db, role: "cleaner", userId: cleanerId }, {});
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the pick doesn't exist", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "release-tool-3", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool(
+      "propose_release_property",
+      { db, role: "cleaner", userId: cleanerId },
+      { pick_id: 9999 },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("explains and stores nothing when the pick belongs to another cleaner", async () => {
+    const db = createConnection(":memory:");
+    const owner = insertCleaner(db, "release-tool-4a", "awesome");
+    const other = insertCleaner(db, "release-tool-4b", "awesome");
+    const propertyId = insertProperty(db, "Not Yours House");
+    const pickId = insertPick(db, owner, propertyId, 1);
+    clearProposal(other);
+
+    const result = await runTool(
+      "propose_release_property",
+      { db, role: "cleaner", userId: other },
+      { pick_id: pickId },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(other)).toBeUndefined();
   });
 });
