@@ -23,6 +23,8 @@ vi.mock("@anthropic-ai/sdk", () => {
 // Imported after the mock above so client.ts picks up the mocked SDK.
 const { runAssistant } = await import("./client.ts");
 const { createConnection } = await import("../db/connection.ts");
+const { setProposal, clearProposal } = await import("./proposals.ts");
+const { getUsageSummary } = await import("./usage.ts");
 
 function insertUser(db: Database.Database, username: string, role: "cleaner" | "admin"): number {
   const result = db
@@ -37,16 +39,21 @@ function insertCleaner(db: Database.Database, username: string): number {
   return userId;
 }
 
-function textResponse(text: string) {
-  return { content: [{ type: "text", text }], stop_reason: "end_turn" };
+function textResponse(text: string, usage = { input_tokens: 10, output_tokens: 5 }) {
+  return { content: [{ type: "text", text }], stop_reason: "end_turn", usage };
 }
 
-function toolUseResponse(id: string, name: string, extraText?: string) {
+function toolUseResponse(
+  id: string,
+  name: string,
+  extraText?: string,
+  usage = { input_tokens: 10, output_tokens: 5 },
+) {
   const content: unknown[] = [{ type: "tool_use", id, name, input: {} }];
   if (extraText) {
     content.unshift({ type: "text", text: extraText });
   }
-  return { content, stop_reason: "tool_use" };
+  return { content, stop_reason: "tool_use", usage };
 }
 
 beforeAll(() => {
@@ -147,6 +154,87 @@ describe("runAssistant — round-trip cap", () => {
 
     expect(createMock).toHaveBeenCalledTimes(6);
     expect(result).toBe("still working on it...");
+  });
+});
+
+describe("runAssistant — pending-proposal context", () => {
+  it("surfaces the stored description in the system prompt when a proposal is pending", async () => {
+    createMock.mockResolvedValueOnce(textResponse("ok"));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-9");
+    setProposal(userId, "claim_property", { propertyId: 1 }, "claim property 42");
+
+    await runAssistant("yes", { db, role: "cleaner", userId });
+
+    const call = createMock.mock.calls[0][0];
+    expect(call.system).toContain("claim property 42");
+    expect(call.system).toContain("execute_pending_action");
+    expect(call.system).toContain("cancel_pending_action");
+
+    clearProposal(userId);
+  });
+
+  it("does not mention a pending action when none is pending", async () => {
+    createMock.mockResolvedValueOnce(textResponse("ok"));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-10");
+
+    await runAssistant("hi", { db, role: "cleaner", userId });
+
+    const call = createMock.mock.calls[0][0];
+    expect(call.system.toLowerCase()).not.toContain("pending");
+  });
+});
+
+describe("runAssistant — usage recording", () => {
+  it("records usage exactly once per call, summed across a multi-round conversation", async () => {
+    createMock
+      .mockResolvedValueOnce(
+        toolUseResponse("toolu_1", "get_my_status", undefined, { input_tokens: 10, output_tokens: 5 }),
+      )
+      .mockResolvedValueOnce(textResponse("done", { input_tokens: 20, output_tokens: 8 }));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-11");
+
+    await runAssistant("how am I doing?", { db, role: "cleaner", userId });
+
+    const summary = getUsageSummary(db);
+    expect(summary.totalRequests).toBe(1);
+    expect(summary.totalInputTokens).toBe(30);
+    expect(summary.totalOutputTokens).toBe(13);
+  });
+
+  it("does not record usage on the ASSISTANT_TEST_STUB short-circuit path", async () => {
+    process.env.ASSISTANT_TEST_STUB = "1";
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-12");
+
+    const result = await runAssistant("hi", { db, role: "cleaner", userId });
+
+    expect(result).toBe("stubbed reply for tests");
+    expect(createMock).not.toHaveBeenCalled();
+    expect(getUsageSummary(db).totalRequests).toBe(0);
+
+    delete process.env.ASSISTANT_TEST_STUB;
+  });
+
+  it("still records whatever usage was accumulated when the SDK throws partway through", async () => {
+    createMock
+      .mockResolvedValueOnce(
+        toolUseResponse("toolu_2", "get_my_status", undefined, { input_tokens: 15, output_tokens: 6 }),
+      )
+      .mockRejectedValueOnce(new Error("ECONNRESET"));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-13");
+
+    await expect(runAssistant("how am I doing?", { db, role: "cleaner", userId })).rejects.toThrow(
+      "Could not reach the assistant right now.",
+    );
+
+    const summary = getUsageSummary(db);
+    expect(summary.totalRequests).toBe(1);
+    expect(summary.totalInputTokens).toBe(15);
+    expect(summary.totalOutputTokens).toBe(6);
   });
 });
 

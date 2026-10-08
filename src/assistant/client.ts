@@ -7,6 +7,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { runTool, TOOLS_FOR_ROLE, type RunToolContext } from "./tools.ts";
+import { getProposal } from "./proposals.ts";
+import { recordUsage } from "./usage.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_ROUND_TRIPS = 6;
@@ -64,10 +66,25 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
   });
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
   const tools = TOOLS_FOR_ROLE[ctx.role];
-  const system = buildSystemPrompt(ctx.role);
+
+  // Each call is a brand-new, stateless conversation -- re-derive pending-proposal
+  // context (task 001's in-memory store) fresh every time and fold it into the
+  // system prompt, rather than carrying any message history across requests.
+  const pending = getProposal(ctx.userId);
+  let system = buildSystemPrompt(ctx.role);
+  if (pending) {
+    system += [
+      ` There is a pending proposed action awaiting confirmation: "${pending.description}".`,
+      ` If the user's latest message is a clear, unambiguous yes, call execute_pending_action.`,
+      ` If it is a clear no, call cancel_pending_action. If the message is unrelated to this`,
+      ` proposal, ignore the pending action and answer the new message normally.`,
+    ].join("");
+  }
 
   const messages: MessageParam[] = [{ role: "user", content: message }];
   let lastText = "";
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   try {
     for (let round = 0; round < MAX_ROUND_TRIPS; round++) {
@@ -78,6 +95,9 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
         tools,
         messages,
       });
+
+      totalInputTokens += response.usage?.input_tokens ?? 0;
+      totalOutputTokens += response.usage?.output_tokens ?? 0;
 
       const text = extractText(response.content);
       if (text) {
@@ -120,5 +140,11 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
     return lastText || TOO_SLOW_TEXT;
   } catch (err) {
     throw new Error(UNREACHABLE_TEXT);
+  } finally {
+    recordUsage(ctx.db, {
+      userId: ctx.userId,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    });
   }
 }
