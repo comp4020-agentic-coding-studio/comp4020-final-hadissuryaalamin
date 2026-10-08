@@ -66,6 +66,11 @@ beforeEach(() => {
   delete process.env.ANTHROPIC_AUTH_TOKEN;
   delete process.env.ANTHROPIC_BASE_URL;
   delete process.env.ANTHROPIC_MODEL;
+  // CI sets this for the live-server spec/ run, but `pnpm check` runs
+  // test:unit under the same env block — without this, every test here
+  // that expects the real (mocked-SDK) path gets the stub's canned reply
+  // instead. Each test below is self-contained regardless of ambient env.
+  delete process.env.ASSISTANT_TEST_STUB;
 });
 
 describe("runAssistant — plain text, no tool use", () => {
