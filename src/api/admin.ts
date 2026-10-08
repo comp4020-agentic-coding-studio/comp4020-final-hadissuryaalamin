@@ -25,7 +25,7 @@ function currentPeriod(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-interface ReviewBatchItem {
+export interface ReviewBatchItem {
   cleaner_id: number;
   stars: number;
 }
@@ -34,6 +34,32 @@ function isReviewBatchItem(value: unknown): value is ReviewBatchItem {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return typeof v.cleaner_id === "number" && typeof v.stars === "number";
+}
+
+/** Inserts a property row and returns it — the body of `POST /api/properties`,
+ * extracted so the assistant's `propose_create_properties_from_file` /
+ * `execute_pending_action` path (task 004) can call it directly. */
+export function createProperty(db: Database.Database, name: string, address: string): PropertyRow {
+  const result = db.prepare("INSERT INTO properties (name, address) VALUES (?, ?)").run(name, address);
+  return db.prepare("SELECT * FROM properties WHERE id = ?").get(result.lastInsertRowid) as PropertyRow;
+}
+
+/**
+ * Inserts a batch of reviews for the current period and recomputes/applies
+ * ranks — the transaction body of `POST /api/reviews/batch`, extracted so
+ * the assistant's `execute_pending_action` (task 004) can run the exact
+ * same write path for a `review_batch` proposal.
+ */
+export function applyReviewBatch(db: Database.Database, items: ReviewBatchItem[]): void {
+  const period = currentPeriod();
+  const run = db.transaction((rows: ReviewBatchItem[]) => {
+    const insert = db.prepare("INSERT INTO reviews (cleaner_id, stars, period) VALUES (?, ?, ?)");
+    for (const item of rows) {
+      insert.run(item.cleaner_id, item.stars, period);
+    }
+    recomputeAndApply(db);
+  });
+  run(items);
 }
 
 /**
@@ -123,12 +149,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       if (typeof name !== "string" || typeof address !== "string") {
         return reply.code(400).send({ error: "name and address are required" });
       }
-      const result = db
-        .prepare("INSERT INTO properties (name, address) VALUES (?, ?)")
-        .run(name, address);
-      const row = db
-        .prepare("SELECT * FROM properties WHERE id = ?")
-        .get(result.lastInsertRowid) as PropertyRow;
+      const row = createProperty(db, name, address);
       return reply.code(201).send(row);
     },
   );
@@ -195,17 +216,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
         return reply.code(400).send({ error: "Body must be an array of {cleaner_id, stars}" });
       }
       const period = currentPeriod();
-
-      const run = db.transaction((items: ReviewBatchItem[]) => {
-        const insert = db.prepare(
-          "INSERT INTO reviews (cleaner_id, stars, period) VALUES (?, ?, ?)",
-        );
-        for (const item of items) {
-          insert.run(item.cleaner_id, item.stars, period);
-        }
-        recomputeAndApply(db);
-      });
-      run(body);
+      applyReviewBatch(db, body);
 
       return reply.code(200).send({ period, count: body.length });
     },

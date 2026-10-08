@@ -104,6 +104,8 @@ describe("runAssistant — plain text, no tool use", () => {
       "get_properties",
       "propose_claim_property",
       "propose_release_property",
+      "execute_pending_action",
+      "cancel_pending_action",
     ]);
     expect(call.system).toContain("cleaner");
     expect(call.system.toLowerCase()).toContain("can't");
@@ -183,8 +185,11 @@ describe("runAssistant — pending-proposal context", () => {
 
     await runAssistant("hi", { db, role: "cleaner", userId });
 
+    // Tool names like cancel_pending_action always appear in the enumerated
+    // tool list, so assert the absence of the pending-specific marker text
+    // (task 005's confirm-flow sentence) rather than the bare word "pending".
     const call = createMock.mock.calls[0][0];
-    expect(call.system.toLowerCase()).not.toContain("pending");
+    expect(call.system).not.toContain("pending proposed action");
   });
 });
 

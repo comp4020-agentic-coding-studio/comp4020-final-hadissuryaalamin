@@ -16,7 +16,7 @@ vi.mock("../realtime/broadcast.ts", () => ({
   registerClient: vi.fn(),
 }));
 import { broadcast } from "../realtime/broadcast.ts";
-import adminRoutes from "./admin.ts";
+import adminRoutes, { createProperty, applyReviewBatch } from "./admin.ts";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-secret";
@@ -109,6 +109,55 @@ describe("admin API — auth", () => {
 
     const response = await app.inject({ method: "POST", url: "/api/properties", payload: {} });
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe("createProperty", () => {
+  it("inserts a property row and returns it, same as POST /api/properties", () => {
+    const db = createConnection(":memory:");
+
+    const row = createProperty(db, "Sunset Villa", "1 Beach Rd");
+
+    expect(row).toMatchObject({ name: "Sunset Villa", address: "1 Beach Rd" });
+    const stored = db.prepare("SELECT * FROM properties WHERE id = ?").get(row.id);
+    expect(stored).toEqual(row);
+  });
+});
+
+describe("applyReviewBatch", () => {
+  it("inserts reviews for the current period and recomputes ranks/cap drops", () => {
+    const db = createConnection(":memory:");
+    const period = currentPeriod();
+    const star = insertCleaner(db, "batch-star", "legend");
+    const props = [1, 2, 3, 4, 5].map((n) => insertProperty(db, `P${n}`));
+    props.forEach((propId, i) => insertPick(db, star, propId, i + 1));
+
+    // Only 3 reviews -> ineligible (<5) -> forced normal (cap 0) -> all 5 picks dropped.
+    applyReviewBatch(db, [
+      { cleaner_id: star, stars: 5 },
+      { cleaner_id: star, stars: 5 },
+      { cleaner_id: star, stars: 5 },
+    ]);
+
+    const row = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(star) as CleanerRow;
+    expect(row.rank).toBe("normal");
+
+    const remainingPicks = db.prepare("SELECT * FROM picks WHERE cleaner_id = ?").all(star) as PickRow[];
+    expect(remainingPicks).toHaveLength(0);
+
+    const reviewRows = db
+      .prepare("SELECT * FROM reviews WHERE cleaner_id = ? AND period = ?")
+      .all(star, period);
+    expect(reviewRows).toHaveLength(3);
+  });
+
+  it("broadcasts ranks:changed via recomputeAndApply", () => {
+    const db = createConnection(":memory:");
+    const star = insertCleaner(db, "batch-broadcast", "legend");
+
+    applyReviewBatch(db, [{ cleaner_id: star, stars: 5 }]);
+
+    expect(broadcast).toHaveBeenCalledWith({ type: "ranks:changed" });
   });
 });
 

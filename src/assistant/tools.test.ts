@@ -12,7 +12,7 @@ import {
   PROPOSE_CLAIM_PROPERTY,
   PROPOSE_RELEASE_PROPERTY,
 } from "./tools.ts";
-import { getProposal, clearProposal } from "./proposals.ts";
+import { getProposal, clearProposal, setProposal } from "./proposals.ts";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-secret";
@@ -47,7 +47,7 @@ function insertPick(db: Database.Database, cleanerId: number, propertyId: number
 }
 
 describe("TOOLS_FOR_ROLE", () => {
-  it("gives cleaners status/leaderboard/properties/propose-claim/propose-release", () => {
+  it("gives cleaners status/leaderboard/properties/propose-claim/propose-release/execute/cancel", () => {
     const names = TOOLS_FOR_ROLE.cleaner.map((t) => t.name);
     expect(names).toEqual([
       "get_my_status",
@@ -55,12 +55,23 @@ describe("TOOLS_FOR_ROLE", () => {
       "get_properties",
       "propose_claim_property",
       "propose_release_property",
+      "execute_pending_action",
+      "cancel_pending_action",
     ]);
   });
 
-  it("gives admins leaderboard/properties/reviews-summary only", () => {
+  it("gives admins leaderboard/properties/reviews-summary/propose-from-file/execute/cancel", () => {
     const names = TOOLS_FOR_ROLE.admin.map((t) => t.name);
-    expect(names).toEqual(["get_leaderboard", "get_properties", "get_reviews_summary"]);
+    expect(names).toEqual([
+      "get_leaderboard",
+      "get_properties",
+      "get_reviews_summary",
+      "propose_review_batch_from_file",
+      "propose_create_cleaners_from_file",
+      "propose_create_properties_from_file",
+      "execute_pending_action",
+      "cancel_pending_action",
+    ]);
   });
 
   it("uses the empty-object Anthropic input_schema shape for every read-only tool", () => {
@@ -351,5 +362,294 @@ describe("runTool — propose_release_property", () => {
     );
     expect(typeof result).toBe("string");
     expect(getProposal(other)).toBeUndefined();
+  });
+});
+
+describe("runTool — propose_review_batch_from_file", () => {
+  it("explains and stores nothing when no file is attached", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-reviews-admin-1", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool("propose_review_batch_from_file", { db, role: "admin", userId: adminId });
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("parses the attached CSV and stores a review_batch proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-reviews-admin-2", "admin");
+    const cleanerId = insertCleaner(db, "csv-cleaner-1", "normal");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_review_batch_from_file",
+      {
+        db,
+        role: "admin",
+        userId: adminId,
+        attachedFile: { name: "reviews.csv", content: "username,stars\ncsv-cleaner-1,5\nghost,3" },
+      },
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result as string).toContain("reviews.csv");
+    expect(result as string).toContain("ghost");
+    expect(getProposal(adminId)).toEqual({
+      type: "review_batch",
+      data: { items: [{ cleaner_id: cleanerId, stars: 5 }] },
+      description: result,
+    });
+  });
+});
+
+describe("runTool — propose_create_cleaners_from_file", () => {
+  it("explains and stores nothing when no file is attached", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-cleaners-admin-1", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool("propose_create_cleaners_from_file", { db, role: "admin", userId: adminId });
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("parses the attached CSV, flags already-taken usernames, and stores a create_cleaners proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-cleaners-admin-2", "admin");
+    insertUser(db, "taken-name", "cleaner");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_cleaners_from_file",
+      {
+        db,
+        role: "admin",
+        userId: adminId,
+        attachedFile: { name: "cleaners.csv", content: "username,password\nnew-cleaner,pw1\ntaken-name,pw2" },
+      },
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result as string).toContain("taken-name");
+    expect(getProposal(adminId)).toEqual({
+      type: "create_cleaners",
+      data: {
+        rows: [
+          { username: "new-cleaner", password: "pw1" },
+          { username: "taken-name", password: "pw2" },
+        ],
+      },
+      description: result,
+    });
+  });
+});
+
+describe("runTool — propose_create_properties_from_file", () => {
+  it("explains and stores nothing when no file is attached", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-properties-admin-1", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool("propose_create_properties_from_file", { db, role: "admin", userId: adminId });
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("parses the attached CSV and stores a create_properties proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "file-properties-admin-2", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_properties_from_file",
+      {
+        db,
+        role: "admin",
+        userId: adminId,
+        attachedFile: { name: "properties.csv", content: "name,address\nSunset Villa,1 Beach Rd" },
+      },
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result as string).toContain("properties.csv");
+    expect(getProposal(adminId)).toEqual({
+      type: "create_properties",
+      data: { rows: [{ name: "Sunset Villa", address: "1 Beach Rd" }] },
+      description: result,
+    });
+  });
+});
+
+describe("runTool — propose_*_from_file role-scoping", () => {
+  it("a cleaner ctx cannot reach any propose_*_from_file tool", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "scoped-cleaner-1", "awesome");
+
+    for (const name of [
+      "propose_review_batch_from_file",
+      "propose_create_cleaners_from_file",
+      "propose_create_properties_from_file",
+    ]) {
+      await expect(runTool(name, { db, role: "cleaner", userId: cleanerId })).rejects.toThrow();
+    }
+  });
+
+  it("an admin ctx cannot reach propose_claim_property or propose_release_property", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "scoped-admin-1", "admin");
+
+    await expect(
+      runTool("propose_claim_property", { db, role: "admin", userId: adminId }, { property_id: 1 }),
+    ).rejects.toThrow();
+    await expect(
+      runTool("propose_release_property", { db, role: "admin", userId: adminId }, { pick_id: 1 }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("runTool — execute_pending_action", () => {
+  it("returns 'Nothing pending to confirm.' when there is no proposal", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "exec-none", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool("execute_pending_action", { db, role: "cleaner", userId: cleanerId });
+    expect(result).toBe("Nothing pending to confirm.");
+  });
+
+  it("claim_property: claims the property and clears the proposal", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "exec-claim", "awesome");
+    const propertyId = insertProperty(db, "Exec Claim Villa");
+    setProposal(cleanerId, "claim_property", { propertyId }, "Claim Exec Claim Villa.");
+
+    const result = await runTool("execute_pending_action", { db, role: "cleaner", userId: cleanerId });
+
+    expect(result as string).toContain("Exec Claim Villa");
+    const pick = db.prepare("SELECT * FROM picks WHERE cleaner_id = ? AND property_id = ?").get(cleanerId, propertyId);
+    expect(pick).toBeDefined();
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("claim_property: clears the proposal even when the claim now fails", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "exec-claim-fail", "awesome");
+    const otherCleanerId = insertCleaner(db, "exec-claim-fail-other", "awesome");
+    const propertyId = insertProperty(db, "Already Taken Villa");
+    insertPick(db, otherCleanerId, propertyId, 1);
+    setProposal(cleanerId, "claim_property", { propertyId }, "Claim Already Taken Villa.");
+
+    const result = await runTool("execute_pending_action", { db, role: "cleaner", userId: cleanerId });
+
+    expect(typeof result).toBe("string");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("release_property: releases the pick and clears the proposal", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "exec-release", "awesome");
+    const propertyId = insertProperty(db, "Exec Release House");
+    const pickId = insertPick(db, cleanerId, propertyId, 1);
+    setProposal(cleanerId, "release_property", { pickId }, "Release Exec Release House.");
+
+    const result = await runTool("execute_pending_action", { db, role: "cleaner", userId: cleanerId });
+
+    expect(result as string).toContain("Exec Release House");
+    const pick = db.prepare("SELECT * FROM picks WHERE id = ?").get(pickId);
+    expect(pick).toBeUndefined();
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("review_batch: inserts the reviews and clears the proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "exec-review-admin", "admin");
+    const cleanerId = insertCleaner(db, "exec-review-cleaner", "normal");
+    setProposal(adminId, "review_batch", { items: [{ cleaner_id: cleanerId, stars: 5 }] }, "Submit 1 review(s).");
+
+    const result = await runTool("execute_pending_action", { db, role: "admin", userId: adminId });
+
+    expect(result).toBe("Submitted 1 review(s).");
+    const reviews = db.prepare("SELECT * FROM reviews WHERE cleaner_id = ?").all(cleanerId);
+    expect(reviews).toHaveLength(1);
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("create_cleaners: creates each row, collects duplicates as failures, and clears the proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "exec-create-cleaners-admin", "admin");
+    insertUser(db, "dup-cleaner", "cleaner");
+    setProposal(
+      adminId,
+      "create_cleaners",
+      {
+        rows: [
+          { username: "fresh-cleaner", password: "pw1" },
+          { username: "dup-cleaner", password: "pw2" },
+        ],
+      },
+      "Create 2 cleaner account(s).",
+    );
+
+    const result = await runTool("execute_pending_action", { db, role: "admin", userId: adminId });
+
+    expect(result as string).toContain("Created 1 cleaner account(s).");
+    expect(result as string).toContain("dup-cleaner");
+    const freshRow = db.prepare("SELECT * FROM users WHERE username = ?").get("fresh-cleaner");
+    expect(freshRow).toBeDefined();
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("create_properties: creates each row and clears the proposal", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "exec-create-properties-admin", "admin");
+    setProposal(
+      adminId,
+      "create_properties",
+      { rows: [{ name: "Exec New Villa", address: "9 New Rd" }] },
+      "Create 1 property.",
+    );
+
+    const result = await runTool("execute_pending_action", { db, role: "admin", userId: adminId });
+
+    expect(result).toBe("Created 1 property.");
+    const row = db.prepare("SELECT * FROM properties WHERE name = ?").get("Exec New Villa");
+    expect(row).toBeDefined();
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("clears an unknown/malformed proposal type without throwing", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "exec-unknown-admin", "admin");
+    setProposal(adminId, "something_weird", {}, "Weird proposal.");
+
+    const result = await runTool("execute_pending_action", { db, role: "admin", userId: adminId });
+
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+});
+
+describe("runTool — cancel_pending_action", () => {
+  it("cancels a pending proposal", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "cancel-1", "awesome");
+    const propertyId = insertProperty(db, "Cancel Villa");
+    setProposal(cleanerId, "claim_property", { propertyId }, "Claim Cancel Villa.");
+
+    const result = await runTool("cancel_pending_action", { db, role: "cleaner", userId: cleanerId });
+
+    expect(result).toBe("Cancelled.");
+    expect(getProposal(cleanerId)).toBeUndefined();
+  });
+
+  it("reports nothing to cancel when there is no pending proposal", async () => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "cancel-2", "awesome");
+    clearProposal(cleanerId);
+
+    const result = await runTool("cancel_pending_action", { db, role: "cleaner", userId: cleanerId });
+
+    expect(result).toBe("Nothing was pending.");
   });
 });

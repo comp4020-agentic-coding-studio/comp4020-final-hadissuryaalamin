@@ -9,9 +9,11 @@
 // code path that does.
 
 import type Database from "better-sqlite3";
-import { getMyStatus, getLeaderboard, getPropertiesList } from "../api/cleaner.ts";
-import { getReviewsSummary } from "../api/admin.ts";
-import { setProposal } from "./proposals.ts";
+import { getMyStatus, getLeaderboard, getPropertiesList, claimProperty, releaseProperty } from "../api/cleaner.ts";
+import { getReviewsSummary, createProperty, applyReviewBatch, type ReviewBatchItem } from "../api/admin.ts";
+import { createCleanerAccount } from "../auth/index.ts";
+import { setProposal, getProposal, clearProposal } from "./proposals.ts";
+import { parseReviewsCsv, parseCleanersCsv, parsePropertiesCsv } from "./csv.ts";
 import { capForRank } from "../ranking/index.ts";
 import type { CleanerRow, PickRow, PropertyRow } from "../db/types.ts";
 
@@ -78,16 +80,71 @@ export const PROPOSE_RELEASE_PROPERTY: ToolSchema = {
   },
 };
 
+export const PROPOSE_REVIEW_BATCH_FROM_FILE: ToolSchema = {
+  name: "propose_review_batch_from_file",
+  description:
+    "Parse an attached CSV (username,stars) into a review batch, matching usernames against existing cleaners, without submitting it yet. On success this stores a pending proposal the user must separately confirm; it always reads the file the user attached, never a filename or content given in the message text.",
+  input_schema: EMPTY_INPUT_SCHEMA,
+};
+
+export const PROPOSE_CREATE_CLEANERS_FROM_FILE: ToolSchema = {
+  name: "propose_create_cleaners_from_file",
+  description:
+    "Parse an attached CSV (username,password) into a batch of new cleaner accounts, flagging any already-taken usernames, without creating them yet. On success this stores a pending proposal the user must separately confirm; it always reads the file the user attached, never a filename or content given in the message text.",
+  input_schema: EMPTY_INPUT_SCHEMA,
+};
+
+export const PROPOSE_CREATE_PROPERTIES_FROM_FILE: ToolSchema = {
+  name: "propose_create_properties_from_file",
+  description:
+    "Parse an attached CSV (name,address) into a batch of new properties, without creating them yet. On success this stores a pending proposal the user must separately confirm; it always reads the file the user attached, never a filename or content given in the message text.",
+  input_schema: EMPTY_INPUT_SCHEMA,
+};
+
+export const EXECUTE_PENDING_ACTION: ToolSchema = {
+  name: "execute_pending_action",
+  description:
+    "Carry out the single pending proposal stored for the current user (from a propose_* tool) and clear it. Returns \"Nothing pending to confirm.\" if there isn't one. Only call this after the user has explicitly confirmed the pending action's description.",
+  input_schema: EMPTY_INPUT_SCHEMA,
+};
+
+export const CANCEL_PENDING_ACTION: ToolSchema = {
+  name: "cancel_pending_action",
+  description: "Discard the pending proposal stored for the current user without carrying it out.",
+  input_schema: EMPTY_INPUT_SCHEMA,
+};
+
 /** Which tools exist for each role. This is the role-scoping boundary — see `runTool`. */
 export const TOOLS_FOR_ROLE: Record<"cleaner" | "admin", ToolSchema[]> = {
-  cleaner: [GET_MY_STATUS, GET_LEADERBOARD, GET_PROPERTIES, PROPOSE_CLAIM_PROPERTY, PROPOSE_RELEASE_PROPERTY],
-  admin: [GET_LEADERBOARD, GET_PROPERTIES, GET_REVIEWS_SUMMARY],
+  cleaner: [
+    GET_MY_STATUS,
+    GET_LEADERBOARD,
+    GET_PROPERTIES,
+    PROPOSE_CLAIM_PROPERTY,
+    PROPOSE_RELEASE_PROPERTY,
+    EXECUTE_PENDING_ACTION,
+    CANCEL_PENDING_ACTION,
+  ],
+  admin: [
+    GET_LEADERBOARD,
+    GET_PROPERTIES,
+    GET_REVIEWS_SUMMARY,
+    PROPOSE_REVIEW_BATCH_FROM_FILE,
+    PROPOSE_CREATE_CLEANERS_FROM_FILE,
+    PROPOSE_CREATE_PROPERTIES_FROM_FILE,
+    EXECUTE_PENDING_ACTION,
+    CANCEL_PENDING_ACTION,
+  ],
 };
 
 export interface RunToolContext {
   db: Database.Database;
   role: "cleaner" | "admin";
   userId: number;
+  /** The file the user attached to this message, if any. propose_*_from_file
+   * tools read this directly -- never model-supplied input -- so a crafted
+   * tool-call argument can never substitute its own CSV content. */
+  attachedFile?: { name: string; content: string };
 }
 
 /**
@@ -175,6 +232,194 @@ function proposeReleaseProperty(ctx: RunToolContext, input: Record<string, unkno
   return description;
 }
 
+/** Joins up to `cap` names, appending a "+N more" suffix past that. */
+function formatNameList(names: string[], cap = 10): string {
+  if (names.length <= cap) return names.join(", ");
+  return `${names.slice(0, cap).join(", ")}, +${names.length - cap} more`;
+}
+
+const NO_FILE_MESSAGE = "No file was attached. Attach a CSV and try again.";
+
+/**
+ * Parses `ctx.attachedFile` (never model input) as a `username,stars` CSV,
+ * matching usernames against the current cleaner list, and stores a
+ * `review_batch` proposal describing the parse result. Stores nothing (and
+ * explains why) if no file was attached.
+ */
+function proposeReviewBatchFromFile(ctx: RunToolContext): string {
+  if (!ctx.attachedFile) return NO_FILE_MESSAGE;
+
+  const cleaners = getLeaderboard(ctx.db) as { cleaner_id: number; username: string }[];
+  const { items, unknownUsernames } = parseReviewsCsv(ctx.attachedFile.content, cleaners);
+
+  let description = `Submit ${items.length} review(s) from ${ctx.attachedFile.name}.`;
+  if (unknownUsernames.length > 0) {
+    description += ` Unknown username(s): ${formatNameList(unknownUsernames)}.`;
+  }
+
+  setProposal(ctx.userId, "review_batch", { items }, description);
+  return description;
+}
+
+/**
+ * Parses `ctx.attachedFile` (never model input) as a `username,password`
+ * CSV, flagging usernames already taken in the `users` table, and stores a
+ * `create_cleaners` proposal describing the parse result. Stores nothing
+ * (and explains why) if no file was attached. Does not insert anything --
+ * that's `execute_pending_action`'s job.
+ */
+function proposeCreateCleanersFromFile(ctx: RunToolContext): string {
+  if (!ctx.attachedFile) return NO_FILE_MESSAGE;
+
+  const { rows, invalidLines } = parseCleanersCsv(ctx.attachedFile.content);
+  const existingUsernames = new Set(
+    (ctx.db.prepare("SELECT username FROM users").all() as { username: string }[]).map((u) =>
+      u.username.toLowerCase(),
+    ),
+  );
+  const alreadyTaken = rows
+    .filter((r) => existingUsernames.has(r.username.toLowerCase()))
+    .map((r) => r.username);
+
+  let description = `Create ${rows.length} cleaner account(s) from ${ctx.attachedFile.name}.`;
+  if (alreadyTaken.length > 0) {
+    description += ` Already-taken username(s): ${formatNameList(alreadyTaken)}.`;
+  }
+  if (invalidLines.length > 0) {
+    description += ` Skipped ${invalidLines.length} invalid line(s).`;
+  }
+
+  setProposal(ctx.userId, "create_cleaners", { rows }, description);
+  return description;
+}
+
+/**
+ * Parses `ctx.attachedFile` (never model input) as a `name,address` CSV and
+ * stores a `create_properties` proposal describing the parse result. Stores
+ * nothing (and explains why) if no file was attached.
+ */
+function proposeCreatePropertiesFromFile(ctx: RunToolContext): string {
+  if (!ctx.attachedFile) return NO_FILE_MESSAGE;
+
+  const { rows, invalidLines } = parsePropertiesCsv(ctx.attachedFile.content);
+
+  let description = `Create ${rows.length} propert${rows.length === 1 ? "y" : "ies"} from ${ctx.attachedFile.name}.`;
+  if (invalidLines.length > 0) {
+    description += ` Skipped ${invalidLines.length} invalid line(s).`;
+  }
+
+  setProposal(ctx.userId, "create_properties", { rows }, description);
+  return description;
+}
+
+/** Plain confirmation/failure string for a `claimProperty` result. */
+function claimResultMessage(
+  db: Database.Database,
+  result: { ok: true; pick: PickRow } | { ok: false; reason: string },
+): string {
+  if (result.ok) {
+    const property = db.prepare("SELECT * FROM properties WHERE id = ?").get(result.pick.property_id) as
+      | PropertyRow
+      | undefined;
+    return `Claimed ${property?.name ?? `property ${result.pick.property_id}`}.`;
+  }
+  const messages: Record<string, string> = {
+    forbidden: "You don't have a cleaner profile, so you can't claim a property.",
+    "property-not-found": "That property no longer exists.",
+    "no-free-slot": "You don't have a free slot to claim another property.",
+    "already-claimed": "That property was claimed by someone else in the meantime.",
+  };
+  return messages[result.reason] ?? "Couldn't claim that property.";
+}
+
+/** Plain confirmation/failure string for a `releaseProperty` result. */
+function releaseResultMessage(
+  db: Database.Database,
+  result: { ok: true; pick: PickRow } | { ok: false; reason: string },
+): string {
+  if (result.ok) {
+    const property = db.prepare("SELECT * FROM properties WHERE id = ?").get(result.pick.property_id) as
+      | PropertyRow
+      | undefined;
+    return `Released ${property?.name ?? `property ${result.pick.property_id}`}.`;
+  }
+  const messages: Record<string, string> = {
+    "not-found": "That claim no longer exists.",
+    forbidden: "That claim doesn't belong to you.",
+  };
+  return messages[result.reason] ?? "Couldn't release that claim.";
+}
+
+/**
+ * Carries out whatever is in `getProposal(ctx.userId)` -- the only code path
+ * in this file that actually writes picks/reviews/cleaners/properties --
+ * dispatching on the proposal's `type` across every kind a propose_* tool
+ * can store. Always clears the slot before returning, on every branch
+ * (including an unknown/missing type), so a stale or malformed entry can
+ * never be executed twice. Returns "Nothing pending to confirm." if there
+ * is no pending proposal.
+ */
+async function executePendingAction(ctx: RunToolContext): Promise<string> {
+  const proposal = getProposal(ctx.userId);
+  if (!proposal) return "Nothing pending to confirm.";
+
+  try {
+    switch (proposal.type) {
+      case "claim_property": {
+        const data = proposal.data as { propertyId: number };
+        const result = claimProperty(ctx.db, ctx.userId, data.propertyId);
+        return claimResultMessage(ctx.db, result);
+      }
+      case "release_property": {
+        const data = proposal.data as { pickId: number };
+        const result = releaseProperty(ctx.db, ctx.userId, data.pickId);
+        return releaseResultMessage(ctx.db, result);
+      }
+      case "review_batch": {
+        const data = proposal.data as { items: ReviewBatchItem[] };
+        applyReviewBatch(ctx.db, data.items);
+        return `Submitted ${data.items.length} review(s).`;
+      }
+      case "create_cleaners": {
+        const data = proposal.data as { rows: { username: string; password: string }[] };
+        let created = 0;
+        const failed: string[] = [];
+        for (const row of data.rows) {
+          try {
+            await createCleanerAccount(ctx.db, row);
+            created++;
+          } catch {
+            failed.push(row.username);
+          }
+        }
+        let message = `Created ${created} cleaner account(s).`;
+        if (failed.length > 0) {
+          message += ` Failed (duplicate username): ${formatNameList(failed)}.`;
+        }
+        return message;
+      }
+      case "create_properties": {
+        const data = proposal.data as { rows: { name: string; address: string }[] };
+        for (const row of data.rows) {
+          createProperty(ctx.db, row.name, row.address);
+        }
+        return `Created ${data.rows.length} propert${data.rows.length === 1 ? "y" : "ies"}.`;
+      }
+      default:
+        return "That pending action is no longer supported.";
+    }
+  } finally {
+    clearProposal(ctx.userId);
+  }
+}
+
+/** Discards the pending proposal for `ctx.userId`, if any, without carrying it out. */
+function cancelPendingAction(ctx: RunToolContext): string {
+  const hadProposal = getProposal(ctx.userId) !== undefined;
+  clearProposal(ctx.userId);
+  return hadProposal ? "Cancelled." : "Nothing was pending.";
+}
+
 /**
  * Dispatches a tool call by name, scoped strictly to `ctx.role`'s own tool
  * set (never the union of all tools). An admin ctx must never be able to
@@ -205,6 +450,16 @@ export async function runTool(
       return proposeClaimProperty(ctx, input);
     case "propose_release_property":
       return proposeReleaseProperty(ctx, input);
+    case "propose_review_batch_from_file":
+      return proposeReviewBatchFromFile(ctx);
+    case "propose_create_cleaners_from_file":
+      return proposeCreateCleanersFromFile(ctx);
+    case "propose_create_properties_from_file":
+      return proposeCreatePropertiesFromFile(ctx);
+    case "execute_pending_action":
+      return executePendingAction(ctx);
+    case "cancel_pending_action":
+      return cancelPendingAction(ctx);
     default:
       // Unreachable: `allowed.some(...)` above already validated `name`
       // against this role's tool set.
