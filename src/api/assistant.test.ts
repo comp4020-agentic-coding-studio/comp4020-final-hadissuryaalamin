@@ -159,6 +159,83 @@ describe("POST /api/assistant", () => {
     });
   });
 
+  it("passes a valid file field through to runAssistant as ctx.attachedFile", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+    const adminId = insertUser(db, "admin-2", "admin");
+    vi.mocked(runAssistant).mockResolvedValue("parsed 3 rows");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant",
+      headers: { cookie: cookieHeader(adminId, "admin") },
+      payload: {
+        message: "create these cleaners",
+        file: { name: "cleaners.csv", content: "username,password\nalice,pw1\n" },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(runAssistant).toHaveBeenCalledWith("create these cleaners", {
+      db,
+      role: "admin",
+      userId: adminId,
+      attachedFile: { name: "cleaners.csv", content: "username,password\nalice,pw1\n" },
+    });
+  });
+
+  it("400s a file with non-string name or content", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+    const adminId = insertUser(db, "admin-3", "admin");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant",
+      headers: { cookie: cookieHeader(adminId, "admin") },
+      payload: { message: "create these cleaners", file: { name: 42, content: "a,b\n" } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(runAssistant).not.toHaveBeenCalled();
+  });
+
+  it("400s a file whose content exceeds 256KB with a legible error", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+    const adminId = insertUser(db, "admin-4", "admin");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant",
+      headers: { cookie: cookieHeader(adminId, "admin") },
+      payload: { message: "create these cleaners", file: { name: "big.csv", content: "a".repeat(262145) } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "file is too large (max 256KB)" });
+    expect(runAssistant).not.toHaveBeenCalled();
+  });
+
+  it("with no file field, ctx.attachedFile is undefined (unchanged behavior)", async () => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+    const cleanerId = insertCleaner(db, "cleaner-7");
+    vi.mocked(runAssistant).mockResolvedValue("ok");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant",
+      headers: { cookie: cookieHeader(cleanerId, "cleaner") },
+      payload: { message: "hello" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(runAssistant).toHaveBeenCalledWith("hello", {
+      db,
+      role: "cleaner",
+      userId: cleanerId,
+    });
+    const ctxArg = vi.mocked(runAssistant).mock.calls[0][1];
+    expect(ctxArg.attachedFile).toBeUndefined();
+  });
+
   it("502s with { error } when runAssistant throws", async () => {
     const db = createConnection(":memory:");
     const app = buildApp(db);
