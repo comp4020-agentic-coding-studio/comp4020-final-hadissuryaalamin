@@ -65,12 +65,17 @@
       }
       form#chat-form {
         display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        flex-shrink: 0;
+      }
+      .chat-input-row {
+        display: flex;
         flex-direction: row;
         gap: 0.6rem;
         align-items: flex-end;
-        flex-shrink: 0;
       }
-      form#chat-form textarea {
+      .chat-input-row textarea {
         flex: 1;
         resize: none;
         border: 1px solid var(--border-strong);
@@ -104,15 +109,23 @@
     </main>
 
     <form id="chat-form">
-      <label class="visually-hidden" for="chat-input">Message</label>
-      <textarea
-        id="chat-input"
-        rows="1"
-        placeholder="Ask a question…"
-        autocomplete="off"
-        required
-      ></textarea>
-      <button type="submit" class="primary">Send</button>
+      <div id="chat-attach" class="inline-form" hidden>
+        <label class="visually-hidden" for="chat-file-input">Attach a file</label>
+        <input type="file" id="chat-file-input" accept=".csv,text/csv" />
+        <span id="chat-file-name" class="muted">No file attached</span>
+      </div>
+      <p id="chat-file-error" class="status" role="status"></p>
+      <div class="chat-input-row">
+        <label class="visually-hidden" for="chat-input">Message</label>
+        <textarea
+          id="chat-input"
+          rows="1"
+          placeholder="Ask a question…"
+          autocomplete="off"
+          required
+        ></textarea>
+        <button type="submit" class="primary">Send</button>
+      </div>
     </form>
 
     <footer><a href="/readme/">About this app</a></footer>
@@ -124,6 +137,17 @@
       const chatEmpty = document.getElementById("chat-empty");
       const chatForm = document.getElementById("chat-form");
       const chatInput = document.getElementById("chat-input");
+      const chatAttach = document.getElementById("chat-attach");
+      const chatFileInput = document.getElementById("chat-file-input");
+      const chatFileName = document.getElementById("chat-file-name");
+      const chatFileError = document.getElementById("chat-file-error");
+
+      const MAX_FILE_BYTES = 262144; // 256 KB — matches the server's own cap.
+
+      function setFileError(text) {
+        chatFileError.textContent = text ?? "";
+        chatFileError.className = "status" + (text ? " error" : "");
+      }
 
       function escapeHtml(value) {
         const div = document.createElement("div");
@@ -172,18 +196,23 @@
         }
         whoami.textContent = "admin";
         renderNav("admin");
+        chatAttach.hidden = false;
       }
 
-      async function sendMessage(message) {
+      async function sendMessage(message, file) {
         addBubble(message, "user");
         const pending = addBubble("Thinking…", "bubble assistant pending");
         chatInput.disabled = true;
         chatForm.querySelector("button[type=submit]").disabled = true;
         try {
+          const requestBody = { message };
+          if (file) {
+            requestBody.file = { name: file.name, content: await file.text() };
+          }
           const res = await fetch("/api/assistant", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify(requestBody),
           });
           if (res.status === 401) {
             location.href = "/";
@@ -197,6 +226,10 @@
           }
           const body = await res.json();
           addBubble(body.reply ?? "", "assistant");
+          if (file) {
+            chatFileInput.value = "";
+            chatFileName.textContent = "No file attached";
+          }
         } catch {
           pending.remove();
           addBubble("Could not reach the server.", "assistant error");
@@ -207,12 +240,24 @@
         }
       }
 
+      chatFileInput.addEventListener("change", () => {
+        setFileError("");
+        const file = chatFileInput.files?.[0];
+        chatFileName.textContent = file ? file.name : "No file attached";
+      });
+
       chatForm.addEventListener("submit", (event) => {
         event.preventDefault();
         const message = chatInput.value.trim();
         if (!message) return;
+        const file = !chatAttach.hidden ? (chatFileInput.files?.[0] ?? null) : null;
+        if (file && file.size > MAX_FILE_BYTES) {
+          setFileError("That file is too large (max 256 KB).");
+          return;
+        }
+        setFileError("");
         chatInput.value = "";
-        sendMessage(message).catch((err) => console.error(err));
+        sendMessage(message, file).catch((err) => console.error(err));
       });
 
       chatInput.addEventListener("keydown", (event) => {

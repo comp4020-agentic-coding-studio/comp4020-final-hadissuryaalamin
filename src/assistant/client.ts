@@ -1,8 +1,10 @@
 // Anthropic tool-use loop: epic.md "assistant" section, task 003. Wraps
 // task 002's TOOLS_FOR_ROLE/runTool (src/assistant/tools.ts) in a
-// request/tool-call/response loop against the Anthropic Messages API.
-// Read-only: the system prompt tells the model plainly that it cannot
-// claim/release properties, enter reviews, or change rank yet.
+// request/tool-call/response loop against the Anthropic Messages API. The
+// system prompt describes the propose/confirm two-step pattern (task 003/004's
+// propose_*/execute_pending_action/cancel_pending_action tools) so the model
+// knows claiming, releasing, and file-based batch actions ARE available, just
+// gated behind an explicit confirmation in a later message.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
@@ -21,12 +23,20 @@ function buildSystemPrompt(role: RunToolContext["role"]): string {
   return [
     `You are the assistant for a cleaner performance & property preference app.`,
     `You are talking to a user with the "${role}" role.`,
-    `You have read-only access to these tools: ${toolNames}. Use them to answer`,
-    `questions about status, the leaderboard, properties, or reviews — never`,
-    `guess at data you could look up.`,
-    `You cannot claim or release properties, enter reviews, or change anyone's`,
-    `rank yet. If asked to do any of those things, say plainly that you can't`,
-    `do that yet — do not attempt a workaround.`,
+    `You have access to these tools: ${toolNames}. Use the get_*/propose_*`,
+    `tools to look up data or validate an action -- never guess at data you`,
+    `could look up.`,
+    `A propose_* tool only validates and stages an action (like claiming or`,
+    `releasing a property, or a file-based batch); it never changes anything`,
+    `by itself. After a propose_* call succeeds, relay its description back`,
+    `to the user and wait for their reply. Call execute_pending_action only`,
+    `once the user's latest message is a clear, unambiguous yes to the exact`,
+    `pending action you just described. Call cancel_pending_action if they`,
+    `clearly decline. If their message is unrelated to a pending proposal,`,
+    `ignore it and answer the new message normally instead of executing or`,
+    `cancelling anything.`,
+    `If asked to do something none of your tools support, say plainly that`,
+    `you can't do that -- do not attempt a workaround.`,
     `Reply in plain text only — no markdown (no **bold**, no # headers, no`,
     `bullet lists with * or -). Replies are shown as plain text, so markdown`,
     `syntax would show up as literal asterisks and hashes. Use plain`,
@@ -117,7 +127,14 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
       const toolResults: ToolResultBlockParam[] = await Promise.all(
         toolUseBlocks.map(async (block) => {
           try {
-            const result = await runTool(block.name, ctx);
+            // block.input carries the model's actual tool-call arguments
+            // (e.g. property_id) -- must be forwarded, or every input-taking
+            // tool (propose_claim_property, propose_release_property) always
+            // sees `undefined` and fails with "I need a valid ...". Found via
+            // task 008's real end-to-end check (spec/assistant.test.ts's
+            // ASSISTANT_TEST_STUB path never exercises this, since it never
+            // reaches a real tool call).
+            const result = await runTool(block.name, ctx, block.input as Record<string, unknown> | undefined);
             return {
               type: "tool_result",
               tool_use_id: block.id,

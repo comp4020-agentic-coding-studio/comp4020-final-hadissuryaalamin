@@ -66,6 +66,19 @@
       </section>
     </div>
 
+    <section id="usage-card" class="card">
+      <h2>Assistant usage</h2>
+      <table id="usage-table">
+        <tbody>
+          <tr><th>Requests</th><td class="num" id="usage-requests">—</td></tr>
+          <tr><th>Input tokens</th><td class="num" id="usage-input-tokens">—</td></tr>
+          <tr><th>Output tokens</th><td class="num" id="usage-output-tokens">—</td></tr>
+          <tr><th>Since</th><td id="usage-since">—</td></tr>
+        </tbody>
+      </table>
+      <p id="usage-empty" class="muted" hidden>No assistant usage yet.</p>
+    </section>
+
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
@@ -75,6 +88,12 @@
       const summary = document.getElementById("summary");
       const propertyStatus = document.getElementById("property-status");
       const cleanerStatus = document.getElementById("cleaner-status");
+      const usageTable = document.getElementById("usage-table");
+      const usageEmpty = document.getElementById("usage-empty");
+      const usageRequests = document.getElementById("usage-requests");
+      const usageInputTokens = document.getElementById("usage-input-tokens");
+      const usageOutputTokens = document.getElementById("usage-output-tokens");
+      const usageSince = document.getElementById("usage-since");
 
       function escapeHtml(value) {
         const div = document.createElement("div");
@@ -168,6 +187,28 @@
         renderSummary(properties, cleaners);
       }
 
+      async function loadUsage() {
+        try {
+          const res = await api("/api/assistant/usage");
+          if (!res.ok) throw new Error("usage fetch failed");
+          const usage = await res.json();
+          if (!usage.totalRequests) {
+            usageTable.hidden = true;
+            usageEmpty.hidden = false;
+            return;
+          }
+          usageTable.hidden = false;
+          usageEmpty.hidden = true;
+          usageRequests.textContent = usage.totalRequests;
+          usageInputTokens.textContent = usage.totalInputTokens;
+          usageOutputTokens.textContent = usage.totalOutputTokens;
+          usageSince.textContent = usage.since ? new Date(usage.since).toLocaleString() : "—";
+        } catch {
+          usageTable.hidden = true;
+          usageEmpty.hidden = false;
+        }
+      }
+
       document.getElementById("add-property-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = event.target;
@@ -233,6 +274,7 @@
         try {
           await confirmAdmin();
           await refreshAll();
+          await loadUsage();
         } catch (err) {
           console.error(err);
         }
