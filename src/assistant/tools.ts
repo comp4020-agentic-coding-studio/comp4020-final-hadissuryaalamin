@@ -101,6 +101,44 @@ export const PROPOSE_CREATE_PROPERTIES_FROM_FILE: ToolSchema = {
   input_schema: EMPTY_INPUT_SCHEMA,
 };
 
+export const PROPOSE_CREATE_CLEANER: ToolSchema = {
+  name: "propose_create_cleaner",
+  description:
+    "Stage a single new cleaner account from a username and password given directly in the conversation (no file needed), without creating it yet. Use this instead of the file-based tool when the user describes just one account in their message.",
+  input_schema: {
+    type: "object",
+    properties: {
+      username: { type: "string", description: "The new cleaner's username." },
+      password: { type: "string", description: "The new cleaner's password." },
+    },
+    required: ["username", "password"],
+  },
+};
+
+export const PROPOSE_CREATE_PROPERTIES: ToolSchema = {
+  name: "propose_create_properties",
+  description:
+    "Stage one or more new properties from name/address pairs given directly in the conversation (no file needed), without creating them yet. Use this instead of the file-based tool when the user describes the properties in their message -- e.g. a numbered range of names sharing a street. Only use an address the user actually gave or confirmed; never invent one -- ask the user for it instead if it's missing.",
+  input_schema: {
+    type: "object",
+    properties: {
+      rows: {
+        type: "array",
+        description: "The properties to create.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            address: { type: "string" },
+          },
+          required: ["name", "address"],
+        },
+      },
+    },
+    required: ["rows"],
+  },
+};
+
 export const EXECUTE_PENDING_ACTION: ToolSchema = {
   name: "execute_pending_action",
   description:
@@ -132,6 +170,8 @@ export const TOOLS_FOR_ROLE: Record<"cleaner" | "admin", ToolSchema[]> = {
     PROPOSE_REVIEW_BATCH_FROM_FILE,
     PROPOSE_CREATE_CLEANERS_FROM_FILE,
     PROPOSE_CREATE_PROPERTIES_FROM_FILE,
+    PROPOSE_CREATE_CLEANER,
+    PROPOSE_CREATE_PROPERTIES,
     EXECUTE_PENDING_ACTION,
     CANCEL_PENDING_ACTION,
   ],
@@ -312,6 +352,62 @@ function proposeCreatePropertiesFromFile(ctx: RunToolContext): string {
   return description;
 }
 
+/**
+ * Stages a single new cleaner account from model-supplied `input.username`/
+ * `input.password` -- the same `create_cleaners` proposal shape the
+ * file-based tool produces (just one row), so `execute_pending_action`
+ * needs no changes to handle either source.
+ */
+function proposeCreateCleaner(ctx: RunToolContext, input: Record<string, unknown> | undefined): string {
+  const username = typeof input?.username === "string" ? input.username.trim() : "";
+  const password = typeof input?.password === "string" ? input.password : "";
+  if (!username || !password) {
+    return "A username and password are both required.";
+  }
+
+  const existing = ctx.db
+    .prepare("SELECT 1 FROM users WHERE lower(username) = lower(?)")
+    .get(username);
+  if (existing) {
+    return `The username "${username}" is already taken.`;
+  }
+
+  const description = `Create cleaner account "${username}".`;
+  setProposal(ctx.userId, "create_cleaners", { rows: [{ username, password }] }, description);
+  return description;
+}
+
+/**
+ * Stages one or more new properties from model-supplied `input.rows` --
+ * the same `create_properties` proposal shape the file-based tool
+ * produces, so `execute_pending_action` needs no changes to handle either
+ * source. Rows missing a name or address are dropped rather than staged
+ * half-filled.
+ */
+function proposeCreateProperties(ctx: RunToolContext, input: Record<string, unknown> | undefined): string {
+  const rawRows = Array.isArray(input?.rows) ? input.rows : [];
+  const rows = rawRows
+    .filter(
+      (r): r is { name: string; address: string } =>
+        typeof r === "object" &&
+        r !== null &&
+        typeof (r as Record<string, unknown>).name === "string" &&
+        typeof (r as Record<string, unknown>).address === "string",
+    )
+    .map((r) => ({ name: r.name.trim(), address: r.address.trim() }))
+    .filter((r) => r.name.length > 0 && r.address.length > 0);
+
+  if (rows.length === 0) {
+    return "No valid name/address rows were given.";
+  }
+
+  const description = `Create ${rows.length} propert${rows.length === 1 ? "y" : "ies"}: ${formatNameList(
+    rows.map((r) => r.name),
+  )}.`;
+  setProposal(ctx.userId, "create_properties", { rows }, description);
+  return description;
+}
+
 /** Plain confirmation/failure string for a `claimProperty` result. */
 function claimResultMessage(
   db: Database.Database,
@@ -456,6 +552,10 @@ export async function runTool(
       return proposeCreateCleanersFromFile(ctx);
     case "propose_create_properties_from_file":
       return proposeCreatePropertiesFromFile(ctx);
+    case "propose_create_cleaner":
+      return proposeCreateCleaner(ctx, input);
+    case "propose_create_properties":
+      return proposeCreateProperties(ctx, input);
     case "execute_pending_action":
       return executePendingAction(ctx);
     case "cancel_pending_action":

@@ -60,7 +60,7 @@ describe("TOOLS_FOR_ROLE", () => {
     ]);
   });
 
-  it("gives admins leaderboard/properties/reviews-summary/propose-from-file/execute/cancel", () => {
+  it("gives admins leaderboard/properties/reviews-summary/propose-from-file/propose-from-text/execute/cancel", () => {
     const names = TOOLS_FOR_ROLE.admin.map((t) => t.name);
     expect(names).toEqual([
       "get_leaderboard",
@@ -69,6 +69,8 @@ describe("TOOLS_FOR_ROLE", () => {
       "propose_review_batch_from_file",
       "propose_create_cleaners_from_file",
       "propose_create_properties_from_file",
+      "propose_create_cleaner",
+      "propose_create_properties",
       "execute_pending_action",
       "cancel_pending_action",
     ]);
@@ -481,8 +483,97 @@ describe("runTool — propose_create_properties_from_file", () => {
   });
 });
 
+describe("runTool — propose_create_cleaner (text, no file)", () => {
+  it("requires both a username and password", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "text-cleaner-admin-1", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool("propose_create_cleaner", { db, role: "admin", userId: adminId }, { username: "charlie" });
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("rejects an already-taken username", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "text-cleaner-admin-2", "admin");
+    insertUser(db, "charlie", "cleaner");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_cleaner",
+      { db, role: "admin", userId: adminId },
+      { username: "charlie", password: "pw1" },
+    );
+    expect(result as string).toContain("charlie");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("stores a create_cleaners proposal with the one row, same shape the file-based tool produces", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "text-cleaner-admin-3", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_cleaner",
+      { db, role: "admin", userId: adminId },
+      { username: "charlie", password: "charlie12345" },
+    );
+
+    expect(getProposal(adminId)).toEqual({
+      type: "create_cleaners",
+      data: { rows: [{ username: "charlie", password: "charlie12345" }] },
+      description: result,
+    });
+  });
+});
+
+describe("runTool — propose_create_properties (text, no file)", () => {
+  it("drops rows missing a name or address and stores nothing if none are left", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "text-properties-admin-1", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_properties",
+      { db, role: "admin", userId: adminId },
+      { rows: [{ name: "Ainslie02" }] },
+    );
+    expect(typeof result).toBe("string");
+    expect(getProposal(adminId)).toBeUndefined();
+  });
+
+  it("stores a create_properties proposal for a multi-row text request, same shape the file-based tool produces", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertUser(db, "text-properties-admin-2", "admin");
+    clearProposal(adminId);
+
+    const result = await runTool(
+      "propose_create_properties",
+      { db, role: "admin", userId: adminId },
+      {
+        rows: [
+          { name: "Ainslie02", address: "2 Ainslie Ave" },
+          { name: "Ainslie03", address: "3 Ainslie Ave" },
+        ],
+      },
+    );
+
+    expect(getProposal(adminId)).toEqual({
+      type: "create_properties",
+      data: {
+        rows: [
+          { name: "Ainslie02", address: "2 Ainslie Ave" },
+          { name: "Ainslie03", address: "3 Ainslie Ave" },
+        ],
+      },
+      description: result,
+    });
+  });
+});
+
 describe("runTool — propose_*_from_file role-scoping", () => {
-  it("a cleaner ctx cannot reach any propose_*_from_file tool", async () => {
+  it("a cleaner ctx cannot reach any propose_*_from_file tool, nor the text-based create tools", async () => {
     const db = createConnection(":memory:");
     const cleanerId = insertCleaner(db, "scoped-cleaner-1", "awesome");
 
@@ -490,6 +581,8 @@ describe("runTool — propose_*_from_file role-scoping", () => {
       "propose_review_batch_from_file",
       "propose_create_cleaners_from_file",
       "propose_create_properties_from_file",
+      "propose_create_cleaner",
+      "propose_create_properties",
     ]) {
       await expect(runTool(name, { db, role: "cleaner", userId: cleanerId })).rejects.toThrow();
     }
