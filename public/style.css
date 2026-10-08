@@ -111,6 +111,27 @@ header.topbar {
 }
 .who { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; color: var(--text-muted); }
 
+/* Brand mark: the one logo on every page, top-left, always back to the
+   chat/home screen — the one place in the app that isn't role-specific. */
+.brand-group { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: 0.6rem;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+.brand-mark:hover, .brand-mark:focus-visible { opacity: 0.82; color: var(--accent-contrast); }
+
 nav.tabs {
   display: flex;
   gap: 0.25rem;
