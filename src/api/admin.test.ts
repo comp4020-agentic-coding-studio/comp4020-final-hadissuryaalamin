@@ -416,6 +416,165 @@ describe("admin API — assistant usage summary", () => {
   });
 });
 
+describe("admin API — slack mapping", () => {
+  type SlackRow = { user_id: number; username: string; slack_user_id: string | null };
+
+  it.each([
+    { method: "GET", url: "/api/cleaners/slack", payload: undefined },
+    { method: "POST", url: "/api/cleaners/1/slack", payload: { slack_user_id: "U0123ABCD" } },
+  ])("rejects no session on $method $url with 401", async ({ method, url, payload }) => {
+    const db = createConnection(":memory:");
+    const app = buildApp(db);
+
+    const response = await app.inject({ method: method as "GET" | "POST", url, payload });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it.each([
+    { method: "GET", url: "/api/cleaners/slack", payload: undefined },
+    { method: "POST", url: "/api/cleaners/1/slack", payload: { slack_user_id: "U0123ABCD" } },
+  ])("rejects a cleaner session on $method $url with 403", async ({ method, url, payload }) => {
+    const db = createConnection(":memory:");
+    const cleanerId = insertCleaner(db, "cleaner-slack");
+    const app = buildApp(db);
+
+    const response = await app.inject({
+      method: method as "GET" | "POST",
+      url,
+      payload,
+      headers: { cookie: cookieFor(cleanerId, "cleaner") },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it("lists every cleaner with username and slack_user_id (null when unset)", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const ann = insertCleaner(db, "ann");
+    const bob = insertCleaner(db, "bob");
+    db.prepare("UPDATE cleaners SET slack_user_id = ? WHERE user_id = ?").run("U0123ABCD", ann);
+    const app = buildApp(db);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/cleaners/slack",
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      { user_id: ann, username: "ann", slack_user_id: "U0123ABCD" },
+      { user_id: bob, username: "bob", slack_user_id: null },
+    ]);
+  });
+
+  it("sets a trimmed Slack ID and returns the updated row", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const cleanerId = insertCleaner(db, "ann");
+    const app = buildApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/cleaners/${cleanerId}/slack`,
+      payload: { slack_user_id: "  U0123ABCD  " },
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ user_id: cleanerId, username: "ann", slack_user_id: "U0123ABCD" });
+    const row = db.prepare("SELECT slack_user_id FROM cleaners WHERE user_id = ?").get(cleanerId) as SlackRow;
+    expect(row.slack_user_id).toBe("U0123ABCD");
+  });
+
+  it.each([{ value: null }, { value: "" }, { value: "   " }])(
+    "clears the mapping when slack_user_id is $value",
+    async ({ value }) => {
+      const db = createConnection(":memory:");
+      const adminId = insertAdmin(db);
+      const cleanerId = insertCleaner(db, "ann");
+      db.prepare("UPDATE cleaners SET slack_user_id = ? WHERE user_id = ?").run("U0123ABCD", cleanerId);
+      const app = buildApp(db);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/cleaners/${cleanerId}/slack`,
+        payload: { slack_user_id: value },
+        headers: { cookie: cookieFor(adminId, "admin") },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ user_id: cleanerId, username: "ann", slack_user_id: null });
+      const row = db.prepare("SELECT slack_user_id FROM cleaners WHERE user_id = ?").get(cleanerId) as SlackRow;
+      expect(row.slack_user_id).toBeNull();
+    },
+  );
+
+  it.each([{ value: "u0123abcd" }, { value: "X0123ABCD" }, { value: "U1" }, { value: "U01 23" }, { value: 42 }])(
+    "400s on a badly formatted Slack ID ($value)",
+    async ({ value }) => {
+      const db = createConnection(":memory:");
+      const adminId = insertAdmin(db);
+      const cleanerId = insertCleaner(db, "ann");
+      const app = buildApp(db);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/cleaners/${cleanerId}/slack`,
+        payload: { slack_user_id: value },
+        headers: { cookie: cookieFor(adminId, "admin") },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({ error: "Slack member ID should look like U0123ABCD" });
+    },
+  );
+
+  it("404s for an unknown cleaner id", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const app = buildApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/cleaners/999/slack",
+      payload: { slack_user_id: "U0123ABCD" },
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("409s when the ID is already linked to a different cleaner, but allows re-saving your own", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const ann = insertCleaner(db, "ann");
+    const bob = insertCleaner(db, "bob");
+    db.prepare("UPDATE cleaners SET slack_user_id = ? WHERE user_id = ?").run("U0123ABCD", ann);
+    const app = buildApp(db);
+    const cookie = cookieFor(adminId, "admin");
+
+    const clash = await app.inject({
+      method: "POST",
+      url: `/api/cleaners/${bob}/slack`,
+      payload: { slack_user_id: "U0123ABCD" },
+      headers: { cookie },
+    });
+    expect(clash.statusCode).toBe(409);
+    expect(clash.json()).toEqual({ error: "That Slack member ID is already linked to ann" });
+
+    const same = await app.inject({
+      method: "POST",
+      url: `/api/cleaners/${ann}/slack`,
+      payload: { slack_user_id: "U0123ABCD" },
+      headers: { cookie },
+    });
+    expect(same.statusCode).toBe(200);
+  });
+});
+
 describe("admin API — realtime broadcast", () => {
   it("broadcasts ranks:changed once per recomputeAndApply call from POST /api/reviews/batch", async () => {
     const db = createConnection(":memory:");
