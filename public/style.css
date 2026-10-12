@@ -344,3 +344,9 @@ body.narrow footer { border-top: 0; text-align: center; margin-top: 1.25rem; }
   .standing > div { flex-basis: 33%; padding: 0.6rem 0.75rem; }
   th, td { padding: 0.55rem 0.45rem; }
 }
+
+/* Cleaners page: Slack member ID cell (input + Save + per-row message) */
+.slack-cell { min-width: 15rem; }
+.slack-cell form { margin: 0; flex-wrap: nowrap; align-items: center; }
+.slack-cell input { flex: 1 1 8rem; min-width: 0; }
+.slack-cell .status { margin: 0.35rem 0 0; }

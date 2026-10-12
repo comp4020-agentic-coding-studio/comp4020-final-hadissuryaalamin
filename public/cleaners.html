@@ -38,12 +38,13 @@
     <section id="cleaners-section" class="card">
       <h2>All cleaners</h2>
       <p class="muted">Changing a rank here is a manual override. The next review batch recomputes ranks and can overwrite it.</p>
+      <p class="muted">Slack member ID: in Slack, open the person's profile, choose the three-dot menu, then "Copy member ID" (looks like U0123ABCD). Leave it empty and save to unlink.</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Username</th><th>Rank</th><th class="num">Score</th>
-              <th>Preferred properties</th><th><span class="visually-hidden">Actions</span></th>
+              <th>Preferred properties</th><th>Slack member ID</th><th><span class="visually-hidden">Actions</span></th>
             </tr>
           </thead>
           <tbody id="cleaners-body"></tbody>
@@ -108,7 +109,58 @@
         return res.json();
       }
 
-      function renderCleaners(cleaners, properties) {
+      async function loadSlack() {
+        const res = await api("/api/cleaners/slack");
+        return res.json();
+      }
+
+      function slackCell(cleaner, slackId) {
+        const td = document.createElement("td");
+        td.className = "slack-cell";
+        const form = document.createElement("form");
+        form.className = "inline-form";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.placeholder = "U0123ABCD";
+        input.value = slackId ?? "";
+        input.setAttribute("aria-label", `Slack member ID for ${cleaner.username}`);
+        const save = document.createElement("button");
+        save.type = "submit";
+        save.textContent = "Save";
+        save.setAttribute("aria-label", `Save Slack member ID for ${cleaner.username}`);
+        const msg = document.createElement("p");
+        msg.className = "status";
+        msg.setAttribute("role", "status");
+        form.append(input, save);
+        td.append(form, msg);
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          setStatus(msg, "Saving…", "");
+          try {
+            const res = await api(`/api/cleaners/${cleaner.cleaner_id}/slack`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ slack_user_id: input.value.trim() }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              setStatus(msg, body.error ?? "Could not save Slack member ID.", "error");
+              return;
+            }
+            input.value = body.slack_user_id ?? "";
+            setStatus(msg, body.slack_user_id ? "Linked." : "Unlinked.", "ok");
+          } catch {
+            setStatus(msg, "Could not reach the server.", "error");
+          }
+        });
+        return td;
+      }
+
+      function renderCleaners(cleaners, properties, slackRows) {
+        const slackByUser = new Map();
+        for (const row of slackRows) slackByUser.set(row.user_id, row.slack_user_id);
         const byOwner = new Map();
         for (const property of properties) {
           if (!property.owner) continue;
@@ -136,6 +188,7 @@
             </td>
             <td class="num">${scoreText}</td>
             <td>${propsText}</td>
+            <td data-slack-slot></td>
             <td class="actions">
               <button type="button" class="danger icon-btn" data-delete title="Delete ${escapeHtml(cleaner.username)}" aria-label="Delete ${escapeHtml(cleaner.username)}">${TRASH_ICON}</button>
             </td>
@@ -143,6 +196,9 @@
           tr.querySelector("[data-rank]").value = cleaner.rank;
           tr.querySelector("[data-rank]").addEventListener("change", (event) =>
             setRank(cleaner.cleaner_id, event.target.value),
+          );
+          tr.querySelector("[data-slack-slot]").replaceWith(
+            slackCell(cleaner, slackByUser.get(cleaner.cleaner_id) ?? null),
           );
           tr.querySelector("[data-delete]").addEventListener("click", () =>
             deleteCleaner(cleaner.cleaner_id, cleaner.username),
@@ -214,8 +270,12 @@
       });
 
       async function refreshAll() {
-        const [cleaners, properties] = await Promise.all([loadCleaners(), loadProperties()]);
-        renderCleaners(cleaners, properties);
+        const [cleaners, properties, slackRows] = await Promise.all([
+          loadCleaners(),
+          loadProperties(),
+          loadSlack(),
+        ]);
+        renderCleaners(cleaners, properties, slackRows);
       }
 
       document.getElementById("logout").addEventListener("click", async () => {
