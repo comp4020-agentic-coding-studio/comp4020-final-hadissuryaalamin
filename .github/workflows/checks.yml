@@ -38,6 +38,7 @@ jobs:
           docker run -d --init --name app -p 8080:8080 -e PORT=8080 \
             -e SEED_ADMIN_USERNAME=ci-admin -e SEED_ADMIN_PASSWORD=ci-admin-password-1 \
             -e ASSISTANT_TEST_STUB=1 \
+            -e SLACK_TEST_STUB=1 -e SLACK_SIGNING_SECRET=ci-slack-signing-secret -e SLACK_CHANNEL_ID=CCITEST01 \
             --tmpfs /data app
       - name: Run the spec
         run: pnpm check
@@ -46,6 +47,8 @@ jobs:
           SEED_ADMIN_USERNAME: ci-admin
           SEED_ADMIN_PASSWORD: ci-admin-password-1
           ASSISTANT_TEST_STUB: "1"
+          SLACK_SIGNING_SECRET: ci-slack-signing-secret
+          SLACK_CHANNEL_ID: CCITEST01
       - name: Show the app's output
         # what the container printed, so a crash or slow boot is visible
         if: ${{ failure() }}

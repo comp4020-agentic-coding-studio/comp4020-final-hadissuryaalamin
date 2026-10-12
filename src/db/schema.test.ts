@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { createConnection } from "./connection.ts";
 import { migrate } from "./schema.ts";
 import type { CleanerRow, PickRow, PropertyRow, ReviewRow, UserRow } from "./types.ts";
@@ -78,7 +79,7 @@ describe("db schema", () => {
       .prepare("SELECT * FROM cleaners WHERE user_id = ?")
       .get(userId) as CleanerRow;
 
-    expect(row).toEqual({ user_id: Number(userId), rank: "normal" });
+    expect(row).toEqual({ user_id: Number(userId), rank: "normal", slack_user_id: null });
   });
 
   it("round-trips a reviews row with an auto-populated created_at", () => {
@@ -178,5 +179,69 @@ describe("db schema", () => {
         .prepare("INSERT INTO picks (cleaner_id, property_id, slot) VALUES (?, ?, ?)")
         .run(userId, anotherPropertyId, 1),
     ).toThrow();
+  });
+
+  describe("cleaners.slack_user_id", () => {
+    function addCleaner(db: Database.Database, username: string, slackUserId?: string) {
+      const { lastInsertRowid } = db
+        .prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)")
+        .run(username, "hash", "cleaner");
+      db.prepare("INSERT INTO cleaners (user_id, slack_user_id) VALUES (?, ?)").run(
+        lastInsertRowid,
+        slackUserId ?? null,
+      );
+      return Number(lastInsertRowid);
+    }
+
+    it("exists, defaults to NULL, and migrate() twice is safe", () => {
+      const db = freshDb();
+      migrate(db);
+      migrate(db);
+      const cols = db.prepare("PRAGMA table_info(cleaners)").all() as {
+        name: string;
+        dflt_value: string | null;
+        notnull: number;
+      }[];
+      const col = cols.find((c) => c.name === "slack_user_id");
+      expect(col).toBeDefined();
+      expect(col?.notnull).toBe(0);
+
+      const id = addCleaner(db, "c1");
+      const row = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(id) as CleanerRow;
+      expect(row.slack_user_id).toBeNull();
+    });
+
+    it("allows many cleaners with a NULL slack_user_id", () => {
+      const db = freshDb();
+      addCleaner(db, "c1");
+      expect(() => addCleaner(db, "c2")).not.toThrow();
+    });
+
+    it("rejects a duplicate non-null slack_user_id", () => {
+      const db = freshDb();
+      addCleaner(db, "c1", "U123");
+      expect(() => addCleaner(db, "c2", "U123")).toThrow(/UNIQUE/);
+    });
+
+    it("adds the column to a database created with the old schema, keeping rows", () => {
+      const db = new Database(":memory:");
+      db.exec(`CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'cleaner'))
+      )`);
+      db.exec(`CREATE TABLE cleaners (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id),
+        rank TEXT NOT NULL DEFAULT 'normal' CHECK (rank IN ('legend', 'awesome', 'normal'))
+      )`);
+      db.prepare("INSERT INTO users (username, password_hash, role) VALUES ('old', 'h', 'cleaner')").run();
+      db.prepare("INSERT INTO cleaners (user_id, rank) VALUES (1, 'legend')").run();
+
+      migrate(db);
+
+      const row = db.prepare("SELECT * FROM cleaners").get() as CleanerRow;
+      expect(row).toEqual({ user_id: 1, rank: "legend", slack_user_id: null });
+    });
   });
 });

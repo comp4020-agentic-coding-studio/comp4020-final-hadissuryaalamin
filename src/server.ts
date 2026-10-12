@@ -28,6 +28,7 @@ import { registerClient } from "./realtime/broadcast.ts";
 import adminRoutes from "./api/admin.ts";
 import cleanerRoutes from "./api/cleaner.ts";
 import assistantRoutes from "./api/assistant.ts";
+import slackRoutes from "./api/slack.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -153,6 +154,7 @@ ${body}
   app.register(adminRoutes, { db });
   app.register(cleanerRoutes, { db });
   app.register(assistantRoutes, { db });
+  app.register(slackRoutes, { db });
 
   return app;
 }

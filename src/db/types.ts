@@ -15,6 +15,7 @@ export interface UserRow {
 export interface CleanerRow {
   user_id: number;
   rank: Rank;
+  slack_user_id: string | null;
 }
 
 export interface ReviewRow {

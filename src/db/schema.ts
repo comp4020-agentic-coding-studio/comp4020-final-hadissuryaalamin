@@ -6,7 +6,8 @@ import type Database from "better-sqlite3";
 //
 // Table shapes come from epic.md's "Data model" section:
 // - users: id, username (unique), password_hash, role (admin|cleaner)
-// - cleaners: user_id (FK -> users.id), rank (legend|awesome|normal, default normal)
+// - cleaners: user_id (FK -> users.id), rank (legend|awesome|normal, default normal),
+//   slack_user_id (nullable, unique when set; added by the column check in migrate())
 // - reviews: id, cleaner_id (FK), stars (1-5), period (YYYY-MM), created_at
 // - properties: id, name, address
 // - picks: id, cleaner_id (FK), property_id (FK, unique), slot (1-5, unique per cleaner_id)
@@ -57,6 +58,17 @@ export function migrate(db: Database.Database): void {
     for (const statement of MIGRATIONS) {
       db.exec(statement);
     }
+    // SQLite has no ADD COLUMN IF NOT EXISTS, so check the table first. The
+    // column is added here (not in CREATE TABLE) so old databases gain it too.
+    const columns = db.prepare("PRAGMA table_info(cleaners)").all() as { name: string }[];
+    if (!columns.some((c) => c.name === "slack_user_id")) {
+      db.exec("ALTER TABLE cleaners ADD COLUMN slack_user_id TEXT");
+    }
+    // ALTER TABLE cannot add a UNIQUE column, so enforce it with an index.
+    // NULLs are distinct in SQLite, so any number of unmapped cleaners is fine.
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_cleaners_slack_user_id ON cleaners(slack_user_id)",
+    );
   });
   run();
 }

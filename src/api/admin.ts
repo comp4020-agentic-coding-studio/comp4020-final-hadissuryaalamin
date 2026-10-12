@@ -278,6 +278,61 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
     },
   );
 
+  const SLACK_ID_PATTERN = /^[UW][A-Z0-9]{2,}$/;
+  const slackRowFor = db.prepare(
+    "SELECT c.user_id AS user_id, u.username AS username, c.slack_user_id AS slack_user_id " +
+      "FROM cleaners c JOIN users u ON u.id = c.user_id WHERE c.user_id = ?",
+  );
+
+  app.get("/api/cleaners/slack", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
+    const rows = db
+      .prepare(
+        "SELECT c.user_id AS user_id, u.username AS username, c.slack_user_id AS slack_user_id " +
+          "FROM cleaners c JOIN users u ON u.id = c.user_id ORDER BY u.username",
+      )
+      .all();
+    return reply.send(rows);
+  });
+
+  app.post<{ Params: { id: string }; Body: { slack_user_id?: string | null } }>(
+    "/api/cleaners/:id/slack",
+    adminOnly,
+    async (request, reply) => {
+      const cleanerId = Number(request.params.id);
+      const raw = request.body?.slack_user_id;
+      if (raw !== null && raw !== undefined && typeof raw !== "string") {
+        return reply.code(400).send({ error: "Slack member ID should look like U0123ABCD" });
+      }
+      const trimmed = typeof raw === "string" ? raw.trim() : "";
+      const slackId = trimmed === "" ? null : trimmed;
+      if (slackId !== null && !SLACK_ID_PATTERN.test(slackId)) {
+        return reply.code(400).send({ error: "Slack member ID should look like U0123ABCD" });
+      }
+
+      const existing = db.prepare("SELECT user_id FROM cleaners WHERE user_id = ?").get(cleanerId);
+      if (!existing) {
+        return reply.code(404).send({ error: "Not found" });
+      }
+
+      if (slackId !== null) {
+        const clash = db
+          .prepare(
+            "SELECT u.username AS username FROM cleaners c JOIN users u ON u.id = c.user_id " +
+              "WHERE c.slack_user_id = ? AND c.user_id != ?",
+          )
+          .get(slackId, cleanerId) as { username: string } | undefined;
+        if (clash) {
+          return reply
+            .code(409)
+            .send({ error: `That Slack member ID is already linked to ${clash.username}` });
+        }
+      }
+
+      db.prepare("UPDATE cleaners SET slack_user_id = ? WHERE user_id = ?").run(slackId, cleanerId);
+      return reply.send(slackRowFor.get(cleanerId));
+    },
+  );
+
   app.get("/api/reviews/summary", adminOnly, async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.send(getReviewsSummary(db));
   });
