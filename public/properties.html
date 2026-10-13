@@ -13,7 +13,7 @@
         <h1>Properties</h1>
       </div>
       <div class="who">
-        <span id="whoami">loading…</span>
+        <span id="whoami"></span>
         <button id="logout" type="button">Sign out</button>
       </div>
     </header>
@@ -50,6 +50,7 @@
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/ui.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const propertiesBody = document.getElementById("properties-body");
@@ -91,7 +92,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        whoami.textContent = "Admin";
       }
 
       async function loadProperties() {
@@ -101,6 +102,7 @@
 
       function renderProperties(properties) {
         propertiesBody.innerHTML = "";
+        if (!properties.length) emptyRow(propertiesBody, 4, "No properties yet. Add one above.");
         for (const property of properties) {
           const tr = document.createElement("tr");
           tr.dataset.id = property.id;
@@ -120,7 +122,9 @@
           </td>
         `;
         tr.querySelector("[data-edit]").addEventListener("click", () => startEditProperty(tr, property));
-        tr.querySelector("[data-delete]").addEventListener("click", () => deleteProperty(property.id));
+        tr.querySelector("[data-delete]").addEventListener("click", (event) =>
+          armConfirm(event.currentTarget, "Delete?", () => deleteProperty(property.id)),
+        );
       }
 
       function startEditProperty(tr, property) {
@@ -136,7 +140,9 @@
             <button type="button" data-cancel>Cancel</button>
           </td>
         `;
-        tr.querySelector("[data-save]").addEventListener("click", () => saveProperty(tr, property.id));
+        tr.querySelector("[data-save]").addEventListener("click", (event) =>
+          withBusy(event.currentTarget, () => saveProperty(tr, property.id)),
+        );
         tr.querySelector("[data-cancel]").addEventListener("click", () => refreshAll());
       }
 
@@ -163,7 +169,6 @@
       }
 
       async function deleteProperty(id) {
-        if (!confirm("Delete this property?")) return;
         setStatus(propertiesStatus, "Deleting…", "");
         try {
           const res = await api(`/api/properties/${id}`, { method: "DELETE" });
@@ -179,9 +184,12 @@
         }
       }
 
-      document.getElementById("add-property-form").addEventListener("submit", async (event) => {
+      document.getElementById("add-property-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const form = event.target;
+        withBusy(event.submitter, () => addProperty(event.target));
+      });
+
+      async function addProperty(form) {
         const data = new FormData(form);
         setStatus(propertiesStatus, "Adding…", "");
         try {
@@ -201,7 +209,7 @@
         } catch {
           setStatus(propertiesStatus, "Could not reach the server.", "error");
         }
-      });
+      }
 
       async function refreshAll() {
         const properties = await loadProperties();

@@ -13,7 +13,7 @@
         <h1>Cleaners</h1>
       </div>
       <div class="who">
-        <span id="whoami">loading…</span>
+        <span id="whoami"></span>
         <button id="logout" type="button">Sign out</button>
       </div>
     </header>
@@ -38,7 +38,7 @@
     <section id="cleaners-section" class="card">
       <h2>All cleaners</h2>
       <p class="muted">Changing a rank here is a manual override. The next review batch recomputes ranks and can overwrite it.</p>
-      <p class="muted">Slack member ID: in Slack, open the person's profile, choose the three-dot menu, then "Copy member ID" (looks like U0123ABCD). Leave it empty and save to unlink.</p>
+      <p class="muted">Slack member ID: in Slack, open the person's profile, choose the three-dot menu, then “Copy member ID” (looks like U0123ABCD). Leave it empty and save to unlink.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -55,6 +55,7 @@
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/ui.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const cleanersBody = document.getElementById("cleaners-body");
@@ -96,7 +97,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        whoami.textContent = "Admin";
       }
 
       async function loadCleaners() {
@@ -135,8 +136,14 @@
         msg.setAttribute("role", "status");
         form.append(input, save);
         td.append(form, msg);
-        form.addEventListener("submit", async (event) => {
+        form.addEventListener("submit", (event) => {
           event.preventDefault();
+          withBusy(save, () => saveSlack(cleaner, input, msg));
+        });
+        return td;
+      }
+
+      async function saveSlack(cleaner, input, msg) {
           setStatus(msg, "Saving…", "");
           try {
             const res = await api(`/api/cleaners/${cleaner.cleaner_id}/slack`, {
@@ -154,8 +161,6 @@
           } catch {
             setStatus(msg, "Could not reach the server.", "error");
           }
-        });
-        return td;
       }
 
       function renderCleaners(cleaners, properties, slackRows) {
@@ -169,6 +174,7 @@
         }
 
         cleanersBody.innerHTML = "";
+        if (!cleaners.length) emptyRow(cleanersBody, 6, "No cleaners yet. Create one above.");
         for (const cleaner of cleaners) {
           const tr = document.createElement("tr");
           const scoreText =
@@ -200,8 +206,10 @@
           tr.querySelector("[data-slack-slot]").replaceWith(
             slackCell(cleaner, slackByUser.get(cleaner.cleaner_id) ?? null),
           );
-          tr.querySelector("[data-delete]").addEventListener("click", () =>
-            deleteCleaner(cleaner.cleaner_id, cleaner.username),
+          tr.querySelector("[data-delete]").addEventListener("click", (event) =>
+            armConfirm(event.currentTarget, "Delete with reviews?", () =>
+              deleteCleaner(cleaner.cleaner_id),
+            ),
           );
           cleanersBody.appendChild(tr);
         }
@@ -227,8 +235,7 @@
         }
       }
 
-      async function deleteCleaner(cleanerId, username) {
-        if (!confirm(`Delete cleaner "${username}"? This removes their reviews and picks too.`)) return;
+      async function deleteCleaner(cleanerId) {
         setStatus(cleanerStatus, "Deleting…", "");
         try {
           const res = await api(`/api/cleaners/${cleanerId}`, { method: "DELETE" });
@@ -244,9 +251,12 @@
         }
       }
 
-      document.getElementById("add-cleaner-form").addEventListener("submit", async (event) => {
+      document.getElementById("add-cleaner-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const form = event.target;
+        withBusy(event.submitter, () => createCleaner(event.target));
+      });
+
+      async function createCleaner(form) {
         const data = new FormData(form);
         setStatus(cleanerStatus, "Creating…", "");
         try {
@@ -262,12 +272,12 @@
           }
           const created = await res.json();
           form.reset();
-          setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
+          setStatus(cleanerStatus, `Created cleaner “${created.username}”.`, "ok");
           await refreshAll();
         } catch {
           setStatus(cleanerStatus, "Could not reach the server.", "error");
         }
-      });
+      }
 
       async function refreshAll() {
         const [cleaners, properties, slackRows] = await Promise.all([

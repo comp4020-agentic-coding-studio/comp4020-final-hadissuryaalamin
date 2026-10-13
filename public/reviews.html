@@ -13,7 +13,7 @@
         <h1>Reviews</h1>
       </div>
       <div class="who">
-        <span id="whoami">loading…</span>
+        <span id="whoami"></span>
         <button id="logout" type="button">Sign out</button>
       </div>
     </header>
@@ -28,19 +28,19 @@
     <div class="summary-cards" id="summary-cards">
       <div class="card">
         <span class="value" id="summary-period">—</span>
-        <span class="label">current period</span>
+        <span class="label">Current period</span>
       </div>
       <div class="card">
         <span class="value" id="summary-total">—</span>
-        <span class="label">reviews this month</span>
+        <span class="label">Reviews this month</span>
       </div>
       <div class="card">
         <span class="value" id="summary-cleaners">—</span>
-        <span class="label">cleaners reviewed</span>
+        <span class="label">Cleaners reviewed</span>
       </div>
       <div class="card">
         <span class="value" id="summary-avg">—</span>
-        <span class="label">average stars (raw)</span>
+        <span class="label">Average stars (raw)</span>
       </div>
     </div>
 
@@ -73,6 +73,7 @@
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/ui.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const reviewRows = document.getElementById("review-rows");
@@ -117,7 +118,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        whoami.textContent = "Admin";
       }
 
       async function loadCleaners() {
@@ -183,7 +184,7 @@
         }
       }
 
-      document.getElementById("submit-reviews").addEventListener("click", async () => {
+      document.getElementById("submit-reviews").addEventListener("click", async (event) => {
         const rows = [...reviewRows.querySelectorAll(".review-row")];
         if (rows.length === 0) {
           setStatus(reviewsStatus, "Add at least one review row first.", "error");
@@ -193,7 +194,7 @@
           cleaner_id: Number(row.querySelector("[data-cleaner]").value),
           stars: Number(row.querySelector("[data-stars]").value),
         }));
-        const ok = await submitBatch(items, reviewsStatus);
+        const ok = await withBusy(event.currentTarget, () => submitBatch(items, reviewsStatus));
         if (ok) reviewRows.innerHTML = "";
       });
 
@@ -221,7 +222,8 @@
         return { items, unknown: [...unknown] };
       }
 
-      document.getElementById("submit-csv").addEventListener("click", async () => {
+      document.getElementById("submit-csv").addEventListener("click", async (event) => {
+        const button = event.currentTarget;
         const file = csvInput.files?.[0];
         if (!file) {
           setStatus(csvStatus, "Choose a CSV file first.", "error");
@@ -233,7 +235,7 @@
           setStatus(csvStatus, "No valid rows found in that CSV.", "error");
           return;
         }
-        const ok = await submitBatch(items, csvStatus);
+        const ok = await withBusy(button, () => submitBatch(items, csvStatus));
         if (ok && unknown.length > 0) {
           setStatus(
             csvStatus,

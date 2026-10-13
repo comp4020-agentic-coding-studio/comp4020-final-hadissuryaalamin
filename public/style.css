@@ -24,7 +24,10 @@
   --normal: #56616d;
   --normal-soft: #eceff2;
   --shadow: 0 1px 2px rgba(15, 23, 32, 0.05), 0 4px 12px rgba(15, 23, 32, 0.05);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 32, 0.08);
   --radius: 0.6rem;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-short: 120ms;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -49,6 +52,7 @@
     --normal: #a3adb7;
     --normal-soft: #262e37;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -128,9 +132,10 @@ header.topbar {
   font-size: 0.85rem;
   letter-spacing: 0.01em;
   text-decoration: none;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dur-short) var(--ease-out);
 }
-.brand-mark:hover, .brand-mark:focus-visible { opacity: 0.82; color: var(--accent-contrast); }
+.brand-mark:hover { opacity: 0.82; color: var(--accent-contrast); }
+.brand-mark:focus-visible { color: var(--accent-contrast); }
 
 nav.tabs {
   display: flex;
@@ -157,7 +162,7 @@ nav.tabs a[aria-current="true"] {
   color: var(--accent);
   background: var(--surface);
   font-weight: 650;
-  box-shadow: 0 1px 2px rgba(15, 23, 32, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Surfaces */
@@ -181,7 +186,7 @@ section { margin-bottom: 1.25rem; }
 table { border-collapse: collapse; width: 100%; font-size: 0.93rem; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 0.6rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
 th {
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -238,7 +243,8 @@ button {
   background: var(--surface);
   color: var(--text);
   font-weight: 550;
-  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+  white-space: nowrap;
+  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 button:hover { border-color: var(--text-muted); background: var(--surface-sunk); }
 button:active { transform: translateY(1px); }
@@ -248,6 +254,7 @@ button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--dan
 button.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
 button.icon-btn { display: inline-grid; place-items: center; padding: 0.4rem; line-height: 0; }
 button.icon-btn svg { width: 1rem; height: 1rem; }
+button[aria-busy="true"] { cursor: progress; }
 button:disabled, button:disabled:hover {
   cursor: not-allowed;
   background: var(--surface-sunk);
@@ -264,8 +271,11 @@ button:disabled, button:disabled:hover {
 
 .review-row, .pick-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .review-row select[data-cleaner] { flex: 1 1 12rem; }
+.review-row select, input[type="file"] { min-width: 0; max-width: 100%; }
 
 .muted { color: var(--text-muted); font-size: 0.88rem; }
+.empty { margin: 0.75rem 0 0; }
+td input, td select, td button { font-size: inherit; }
 .card > p.muted { margin: 0 0 0.75rem; max-width: 70ch; }
 
 /* Rank tiers */
@@ -295,7 +305,7 @@ button:disabled, button:disabled:hover {
 }
 .standing > div { flex: 1 1 8rem; padding: 0.75rem 1rem; }
 .standing > div + div { border-left: 1px solid var(--border); }
-.standing dt { font-size: 0.74rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.standing dt { font-size: 0.78rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .standing dd { margin: 0.2rem 0 0; font-size: 1.15rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .standing dd .pill { font-size: 0.85rem; padding: 0.15rem 0.7rem; }
 .standing dd small { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); }

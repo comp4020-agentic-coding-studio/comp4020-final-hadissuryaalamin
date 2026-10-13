@@ -13,7 +13,7 @@
         <h1>Admin dashboard</h1>
       </div>
       <div class="who">
-        <span id="whoami">loading…</span>
+        <span id="whoami"></span>
         <button id="logout" type="button">Sign out</button>
       </div>
     </header>
@@ -85,6 +85,7 @@
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/ui.js"></script>
     <script>
       const whoami = document.getElementById("whoami");
       const leaderboardBody = document.getElementById("leaderboard-body");
@@ -135,7 +136,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        whoami.textContent = "Admin";
       }
 
       async function loadProperties() {
@@ -158,6 +159,7 @@
         }
 
         leaderboardBody.innerHTML = "";
+        if (!entries.length) emptyRow(leaderboardBody, 4, "No cleaners yet. Create one below.");
         for (const entry of entries) {
           const tr = document.createElement("tr");
           const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
@@ -205,16 +207,17 @@
           usageRequests.textContent = usage.totalRequests;
           usageInputTokens.textContent = usage.totalInputTokens;
           usageOutputTokens.textContent = usage.totalOutputTokens;
-          usageSince.textContent = usage.since ? new Date(usage.since).toLocaleString() : "—";
+          usageSince.textContent = usage.since ? new Date(usage.since).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
         } catch {
           usageTable.hidden = true;
           usageEmpty.hidden = false;
         }
       }
 
-      document.getElementById("add-property-form").addEventListener("submit", async (event) => {
+      document.getElementById("add-property-form").addEventListener("submit", (event) => {
         event.preventDefault();
         const form = event.target;
+        withBusy(event.submitter, async () => {
         const data = new FormData(form);
         setStatus(propertyStatus, "Adding…", "");
         try {
@@ -234,11 +237,13 @@
         } catch {
           setStatus(propertyStatus, "Could not reach the server.", "error");
         }
+        });
       });
 
-      document.getElementById("add-cleaner-form").addEventListener("submit", async (event) => {
+      document.getElementById("add-cleaner-form").addEventListener("submit", (event) => {
         event.preventDefault();
         const form = event.target;
+        withBusy(event.submitter, async () => {
         const data = new FormData(form);
         setStatus(cleanerStatus, "Creating…", "");
         try {
@@ -254,11 +259,12 @@
           }
           const created = await res.json();
           form.reset();
-          setStatus(cleanerStatus, `Created cleaner "${created.username}".`, "ok");
+          setStatus(cleanerStatus, `Created cleaner “${created.username}”.`, "ok");
           await refreshAll();
         } catch {
           setStatus(cleanerStatus, "Could not reach the server.", "error");
         }
+        });
       });
 
       document.getElementById("logout").addEventListener("click", async () => {

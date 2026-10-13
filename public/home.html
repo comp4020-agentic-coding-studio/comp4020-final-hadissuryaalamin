@@ -11,6 +11,7 @@
         display: flex;
         flex-direction: column;
         height: 100vh;
+        height: 100dvh;
         padding-bottom: 0;
       }
       main.chat-main {
@@ -60,9 +61,15 @@
         border-color: color-mix(in srgb, var(--danger) 45%, transparent);
         color: var(--danger);
       }
-      .bubble.pending {
-        color: var(--text-muted);
-        font-style: italic;
+      .bubble.pending { color: var(--text-muted); }
+      .bubble.pending::after {
+        content: "…";
+        display: inline-block;
+        animation: pending-pulse 1.2s var(--ease-out) infinite alternate;
+      }
+      @keyframes pending-pulse { from { opacity: 0.25; } to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        .bubble.pending::after { animation: none; }
       }
       #chat-empty {
         margin: auto;
@@ -115,7 +122,7 @@
         <h1>Assistant</h1>
       </div>
       <div class="who">
-        <span id="whoami">loading…</span>
+        <span id="whoami"></span>
         <button id="logout" type="button">Sign out</button>
       </div>
     </header>
@@ -212,18 +219,18 @@
           throw new Error("not signed in");
         }
         if (res.status === 200) {
-          whoami.textContent = "cleaner";
+          whoami.textContent = "Cleaner";
           renderNav("cleaner");
           return;
         }
-        whoami.textContent = "admin";
+        whoami.textContent = "Admin";
         renderNav("admin");
         chatAttach.hidden = false;
       }
 
       async function sendMessage(message, file) {
         addBubble(message, "user");
-        const pending = addBubble("Thinking…", "bubble assistant pending");
+        const pending = addBubble("Thinking", "bubble assistant pending");
         chatInput.disabled = true;
         chatForm.querySelector("button[type=submit]").disabled = true;
         try {
