@@ -1,8 +1,8 @@
 # Process overview
 
-This is the crit 8 version of this file. It gets rewritten, not appended to,
-at crits 9 and 10, so read it as "what happened up to this point," not a
-running log.
+This is the crit 9 version of this file. Everything up to "Where this
+stood at crit 8" is unchanged from crit 8; the crit 9 work is in the last
+section. Read it as "what happened up to this point," not a running log.
 
 ## From brief to design
 
@@ -93,7 +93,7 @@ a second test story, or a bigger image than the volume budget allows.
 synchronous calls would bottleneck under real concurrent load, but a
 handful of cleaners checking a leaderboard never produces that load.
 
-## Where this actually stands
+## Where this stood at crit 8
 
 All nine build tasks landed, in the dependency order the task files set:
 DB schema, then auth and the ranking engine in parallel, then the admin and
@@ -118,3 +118,57 @@ model above. Dummy data (30 cleaners, 255 properties) was seeded through the
 real API, partly to exercise the endpoints and partly to check the
 15/legend, 10/awesome split lands exactly where the design doc says — it
 did, unprompted, stronger evidence than a unit test run in isolation.
+
+## Crit 9: real-time, then more than one way in
+
+**Real-time.** The crit 8 design doc deferred live updates on purpose, and
+the data model never had to change to add them. A `realtime-updates` epic
+added a small broadcast registry
+([`ff23d05`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/ff23d0544dc3a765452506bfc7010e07a0a1c476)),
+fired it only after a claim or release has actually committed
+([`610d9bd`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/610d9bd6adaee90e7a9bb1c6c6202729aaf7b5ed)),
+and wired every page to re-fetch when an event arrives
+([`b00d3a8`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/b00d3a8f603760833af03d8c0ec89b15137b36fb)).
+The transport is the WebSocket channel the crit 8 stack decision already
+chose, authenticated with the same session cookie as every HTTP route.
+
+**The multi-user decision.** Crit 9 asks for one decision about how the app
+behaves when several people use it at once, written down with the options
+and the cost. Mine is the claim race: two cleaners claiming the same property
+in the same second. It is written up as an architecture decision record in
+[`docs/decisions/0001-claim-race.md`](docs/decisions/0001-claim-race.md).
+Short version: the database's unique constraint decides the winner, the loser
+gets a legible 409, and only the winner's claim is broadcast. The cost is no
+fairness for the slower click and a hard dependency on a single machine.
+
+**An assistant, then Slack.** I asked for an LLM assistant inside the app,
+and it grew in three passes, each with its own design doc in
+`docs/superpowers/specs/`: read-only questions first
+([`5980cdb`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/5980cdb15d0d26207b510e97031ca7779aafe0f6)),
+then write actions behind a propose-then-confirm step
+([`1f30a9f`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/1f30a9fe739bed118ca0ea7c099c0cd4e3cc42ae)),
+then a Slack channel where cleaners can ask for a property in plain words and
+the assistant answers in a thread
+([`c154db5`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/c154db585bc06839730362e8586ebe140951544b),
+merged in
+[`2f7ef9a`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-hadissuryaalamin/commit/2f7ef9a6b51a35d44f8888df40e79c4de9a28867)).
+None of these added a new way to claim a property: the button, the assistant
+and Slack all call the same `claimProperty` function, so the claim race
+decision and its tests cover all three. The assistant's model only ever
+decides *whether* to run a stored proposal, never *what* it runs.
+
+**Where I had to correct course.** I could not install a Slack app in the
+workspace I had joined, because I was a member and not an admin, so the
+integration lives in a workspace I created for the project. The first live
+test sent messages and got nothing back. The server logs showed Slack had
+verified the webhook URL but never sent a single message event. Checking the
+bot's token, channel membership and scopes from inside the running server
+ruled out the app's side, and the cause turned out to be a Slack setting:
+Socket Mode was on, which routes events away from the webhook entirely.
+Turning it off fixed it. I also pasted terminal output that contained the bot
+token and signing secret, and rotated both before going further.
+
+**State at crit 9.** `pnpm check` is green: typecheck, 251 unit tests and 19
+contract tests against a running instance, including the race invariant
+under the broadcast layer and the Slack webhook's signature checks. CI is
+green on `main` and the app is deployed.
