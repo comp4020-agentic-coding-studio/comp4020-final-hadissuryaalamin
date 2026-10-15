@@ -1,55 +1,34 @@
-/* Shared plain styling — small web, no framework, system font. One accent,
-   rank tiers carry the only other colors because they carry meaning. */
+/* Shared plain styling — small web, no framework, Inter + a serif italic
+   for headings. One accent, rank tiers carry the only other colors because
+   they carry meaning. Light only, no dark-mode variant. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&family=STIX+Two+Text:ital@1&display=swap");
 
 :root {
-  color-scheme: light dark;
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --surface-sunk: #eef1f4;
-  --text: #17202a;
-  --text-muted: #56616d;
-  --border: #dde2e7;
-  --border-strong: #c3cbd3;
-  --danger: #b00020;
-  --danger-soft: #fdecee;
+  color-scheme: light;
+  --bg: #faf7f2;
+  --surface: #fffdfa;
+  --surface-sunk: #f3efe7;
+  --text: #221f1a;
+  --text-muted: #6b6356;
+  --border: #e6ddd0;
+  --border-strong: #d2c6b3;
+  --danger: #a3233f;
+  --danger-soft: #fbe9ed;
   --ok: #1a7f37;
-  --accent: #0f5c73;
-  --accent-hover: #0b4a5d;
-  --accent-soft: #e3f0f4;
+  --accent: #343682;
+  --accent-hover: #272a66;
+  --accent-soft: #e7e8f6;
   --accent-contrast: #ffffff;
-  --legend: #8a5f00;
-  --legend-soft: #fbf1d9;
-  --awesome: #3b5bdb;
-  --awesome-soft: #e7ecfd;
-  --normal: #56616d;
-  --normal-soft: #eceff2;
-  --shadow: 0 1px 2px rgba(15, 23, 32, 0.05), 0 4px 12px rgba(15, 23, 32, 0.05);
-  --radius: 0.6rem;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1419;
-    --surface: #171e25;
-    --surface-sunk: #121820;
-    --text: #e6eaee;
-    --text-muted: #9aa5b0;
-    --border: #2a333d;
-    --border-strong: #3b4651;
-    --danger: #ff7b7b;
-    --danger-soft: #3a1c20;
-    --ok: #4ade80;
-    --accent: #5fc2de;
-    --accent-hover: #86d3e8;
-    --accent-soft: #15323c;
-    --accent-contrast: #06252d;
-    --legend: #e8b84a;
-    --legend-soft: #3a2f14;
-    --awesome: #9bb0ff;
-    --awesome-soft: #1f2747;
-    --normal: #a3adb7;
-    --normal-soft: #262e37;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.25);
-  }
+  --legend: #96690a;
+  --legend-soft: #faf0da;
+  --awesome: #343682;
+  --awesome-soft: #e7e8f6;
+  --normal: #6b6356;
+  --normal-soft: #f0ebe1;
+  --shadow: 0 1px 2px rgba(45, 35, 20, 0.05), 0 4px 16px rgba(45, 35, 20, 0.06);
+  --radius: 1rem;
+  --font-heading: "STIX Two Text", Georgia, serif;
 }
 
 * { box-sizing: border-box; }
@@ -66,7 +45,7 @@
 html { background: var(--bg); accent-color: var(--accent); scrollbar-color: var(--border-strong) transparent; }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   max-width: 68rem;
   margin: 0 auto;
   padding: 1.5rem;
@@ -83,7 +62,7 @@ a:hover { color: var(--accent-hover); text-decoration-thickness: 2px; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 0.25rem; }
 
-h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin: 0; text-wrap: balance; }
+h1 { font-family: var(--font-heading); font-style: italic; font-weight: 500; font-size: 1.85rem; letter-spacing: -0.01em; line-height: 1.2; margin: 0; text-wrap: balance; }
 h2 { font-size: 1.1rem; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 0.75rem; }
 h3 {
   font-size: 0.78rem;
@@ -234,7 +213,7 @@ input[type="file"]::file-selector-button {
 button {
   cursor: pointer;
   border: 1px solid var(--border-strong);
-  border-radius: 0.4rem;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
   font-weight: 550;

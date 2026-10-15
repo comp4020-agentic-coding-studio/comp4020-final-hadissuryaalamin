@@ -7,104 +7,75 @@
     <link rel="stylesheet" href="/style.css" />
     <style>
       /* Chat-specific layout only — everything else reuses style.css tokens. */
-      body.chat-body {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        padding-bottom: 0;
+      body.chat-body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: 1rem; }
+      body.chat-body nav.tabs { margin-bottom: 1rem; }
+      body.chat-body > footer { display: none; }
+      .chat-panel {
+        flex: 1; min-height: 0; display: flex; flex-direction: column;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
       }
-      main.chat-main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        margin-bottom: 1rem;
-        width: 100%;
-        max-width: 44rem;
-        margin-left: auto;
-        margin-right: auto;
+      #chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 1.5rem 1.25rem; }
+      .chat-column { max-width: 44rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; min-height: 100%; }
+      .msg { display: flex; gap: 0.75rem; align-items: flex-start; max-width: 100%; }
+      .msg.user { justify-content: flex-end; }
+      .msg.user .text {
+        background: var(--accent); color: var(--accent-contrast);
+        padding: 0.6rem 1rem; border-radius: 1.25rem 1.25rem 0.35rem 1.25rem; max-width: 80%;
       }
-      #chat-log {
-        flex: 1;
-        min-height: 0;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 0.85rem;
-        padding: 0.5rem 0.1rem 0.75rem;
+      .msg.assistant .avatar {
+        flex-shrink: 0; width: 1.9rem; height: 1.9rem; border-radius: 0.55rem;
+        display: grid; place-items: center; background: var(--accent-soft); color: var(--accent);
+        font-size: 0.7rem; font-weight: 700;
       }
-      .bubble {
-        max-width: 90%;
-        padding: 0.65rem 0.95rem;
-        border-radius: 1.1rem;
-        font-size: 0.95rem;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-wrap: break-word;
+      .msg.assistant .text { padding-top: 0.2rem; max-width: 40rem; min-width: 0; }
+      .msg.assistant.error .text {
+        color: var(--danger); background: var(--danger-soft); padding: 0.55rem 0.9rem; border-radius: 0.75rem;
       }
-      .bubble.user {
-        align-self: flex-end;
-        background: var(--accent);
-        color: var(--accent-contrast);
-        border-bottom-right-radius: 0.2rem;
+      .msg.pending .text { color: var(--text-muted); font-style: italic; }
+      .text { font-size: 0.97rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+      .chat-empty { margin: auto 0; text-align: center; padding: 2rem 0; }
+      .chat-empty h2 { font-family: var(--font-heading); font-style: italic; font-weight: 500; font-size: 1.6rem; margin: 0 0 0.4rem; }
+      .chat-empty p { margin: 0 0 1.25rem; }
+      .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+      .suggestions button { font-size: 0.88rem; font-weight: 500; padding: 0.45rem 0.95rem; }
+
+      .composer { border-top: 1px solid var(--border); padding: 0.85rem 1.25rem 1rem; background: var(--surface); }
+      .composer form { max-width: 44rem; margin: 0 auto; display: grid; gap: 0.5rem; }
+      .composer .status { margin: 0; }
+      .attach-chip {
+        display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; max-width: 100%;
+        font-size: 0.82rem; padding: 0.2rem 0.3rem 0.2rem 0.7rem; border-radius: 999px;
+        background: var(--accent-soft); color: var(--accent); font-weight: 550;
       }
-      .bubble.assistant {
-        align-self: flex-start;
-        background: var(--surface-sunk);
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-bottom-left-radius: 0.2rem;
+      .attach-chip[hidden] { display: none; }
+      .attach-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .attach-chip button { border: 0; background: transparent; padding: 0.15rem 0.35rem; color: inherit; line-height: 1; }
+      .input-row {
+        display: flex; gap: 0.4rem; align-items: flex-end;
+        border: 1px solid var(--border-strong); border-radius: 1.4rem; background: var(--bg);
+        padding: 0.35rem 0.35rem 0.35rem 0.9rem;
       }
-      .bubble.assistant.error {
-        background: var(--danger-soft);
-        border-color: color-mix(in srgb, var(--danger) 45%, transparent);
-        color: var(--danger);
+      .input-row.has-attach { padding-left: 0.4rem; }
+      .input-row:focus-within { border-color: var(--accent); }
+      .input-row textarea {
+        flex: 1; resize: none; border: 0; background: transparent; color: var(--text);
+        padding: 0.45rem 0.3rem; font: inherit; line-height: 1.4; max-height: 8rem;
       }
-      .bubble.pending {
-        color: var(--text-muted);
-        font-style: italic;
-      }
-      #chat-empty {
-        margin: auto;
-        text-align: center;
-      }
-      form#chat-form {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-        flex-shrink: 0;
-        width: 100%;
-        max-width: 44rem;
-        margin-left: auto;
-        margin-right: auto;
-      }
-      .chat-input-row {
-        display: flex;
-        flex-direction: row;
-        gap: 0.4rem;
-        align-items: flex-end;
-        border: 1px solid var(--border-strong);
-        border-radius: 1.1rem;
-        background: var(--surface);
-        box-shadow: var(--shadow);
-        padding: 0.4rem 0.4rem 0.4rem 0.9rem;
-      }
-      .chat-input-row:focus-within { border-color: var(--accent); }
-      .chat-input-row textarea {
-        flex: 1;
-        resize: none;
-        border: none;
-        background: transparent;
-        color: var(--text);
-        padding: 0.35rem 0;
-        font: inherit;
-        line-height: 1.4;
-        max-height: 8rem;
-      }
-      .chat-input-row textarea:focus { outline: none; }
-      .chat-input-row button.primary {
-        border-radius: 0.85rem;
-        padding: 0.55rem 1.1rem;
+      .input-row textarea:focus { outline: none; }
+      .input-row .icon-btn { border: 0; background: transparent; color: var(--text-muted); padding: 0.5rem; }
+      .input-row .icon-btn[hidden] { display: none; }
+      .input-row .icon-btn:hover { background: var(--surface-sunk); color: var(--text); }
+      .input-row .icon-btn svg { width: 1.15rem; height: 1.15rem; }
+      .input-row button.primary { padding: 0.5rem 1.1rem; }
+      .composer .hint { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin: 0; }
+
+      @media (max-width: 30rem) {
+        #chat-log { padding: 1rem 0.85rem; }
+        .composer { padding: 0.65rem 0.65rem 0.75rem; }
+        .composer .hint { display: none; }
+        .msg.user .text { max-width: 88%; }
       }
     </style>
   </head>
@@ -122,33 +93,43 @@
 
     <nav class="tabs" id="nav-links"></nav>
 
-    <main class="chat-main card">
-      <div id="chat-log">
-        <p id="chat-empty" class="muted">
-          Ask about your score, the leaderboard, or properties.
-        </p>
+    <main class="chat-panel">
+      <div id="chat-log" aria-live="polite">
+        <div class="chat-column" id="chat-column">
+          <div class="chat-empty" id="chat-empty">
+            <h2>What do you want to check?</h2>
+            <p class="muted">Answers come from the current leaderboard, reviews and property list.</p>
+            <div class="suggestions" id="chat-suggestions"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <form id="chat-form">
+          <span class="attach-chip" id="chat-file-chip" hidden>
+            <span id="chat-file-name"></span>
+            <button type="button" id="chat-file-remove" aria-label="Remove attached file">&times;</button>
+          </span>
+          <input type="file" id="chat-file-input" accept=".csv,text/csv" hidden />
+          <p id="chat-file-error" class="status" role="status"></p>
+          <div class="input-row" id="chat-input-row">
+            <button type="button" class="icon-btn" id="chat-attach" aria-label="Attach a CSV file" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+            </button>
+            <label class="visually-hidden" for="chat-input">Message</label>
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Ask a question…"
+              autocomplete="off"
+              required
+            ></textarea>
+            <button type="submit" class="primary">Send</button>
+          </div>
+          <p class="hint">Enter to send · Shift+Enter for a new line</p>
+        </form>
       </div>
     </main>
-
-    <form id="chat-form">
-      <div id="chat-attach" class="inline-form" hidden>
-        <label class="visually-hidden" for="chat-file-input">Attach a file</label>
-        <input type="file" id="chat-file-input" accept=".csv,text/csv" />
-        <span id="chat-file-name" class="muted">No file attached</span>
-      </div>
-      <p id="chat-file-error" class="status" role="status"></p>
-      <div class="chat-input-row">
-        <label class="visually-hidden" for="chat-input">Message</label>
-        <textarea
-          id="chat-input"
-          rows="1"
-          placeholder="Ask a question…"
-          autocomplete="off"
-          required
-        ></textarea>
-        <button type="submit" class="primary">Send</button>
-      </div>
-    </form>
 
     <footer><a href="/readme/">About this app</a></footer>
 
@@ -156,15 +137,51 @@
       const whoami = document.getElementById("whoami");
       const navLinks = document.getElementById("nav-links");
       const chatLog = document.getElementById("chat-log");
+      const chatColumn = document.getElementById("chat-column");
       const chatEmpty = document.getElementById("chat-empty");
+      const chatSuggestions = document.getElementById("chat-suggestions");
       const chatForm = document.getElementById("chat-form");
       const chatInput = document.getElementById("chat-input");
+      const chatInputRow = document.getElementById("chat-input-row");
       const chatAttach = document.getElementById("chat-attach");
       const chatFileInput = document.getElementById("chat-file-input");
+      const chatFileChip = document.getElementById("chat-file-chip");
       const chatFileName = document.getElementById("chat-file-name");
+      const chatFileRemove = document.getElementById("chat-file-remove");
       const chatFileError = document.getElementById("chat-file-error");
 
       const MAX_FILE_BYTES = 262144; // 256 KB — matches the server's own cap.
+
+      const SUGGESTIONS = {
+        admin: ["Who is top of the leaderboard?", "Which properties are unclaimed?", "How did this month's reviews go?"],
+        cleaner: ["What's my rank and score?", "Which properties are still free?", "Who is top of the leaderboard?"],
+      };
+
+      function renderSuggestions(role) {
+        chatSuggestions.replaceChildren(
+          ...SUGGESTIONS[role].map((text) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = text;
+            button.addEventListener("click", () => {
+              chatInput.value = text;
+              chatInput.focus();
+            });
+            return button;
+          }),
+        );
+      }
+
+      function clearAttachment() {
+        chatFileInput.value = "";
+        chatFileChip.hidden = true;
+        chatFileName.textContent = "";
+      }
+
+      function autosize() {
+        chatInput.style.height = "auto";
+        chatInput.style.height = chatInput.scrollHeight + "px";
+      }
 
       function setFileError(text) {
         chatFileError.textContent = text ?? "";
@@ -177,14 +194,24 @@
         return div.innerHTML;
       }
 
-      function addBubble(text, kind) {
-        chatEmpty.hidden = true;
-        const div = document.createElement("div");
-        div.className = "bubble " + kind;
-        div.textContent = text;
-        chatLog.appendChild(div);
+      function addMessage(text, kind) {
+        chatEmpty.remove();
+        const row = document.createElement("div");
+        row.className = "msg " + kind;
+        if (!kind.startsWith("user")) {
+          const avatar = document.createElement("div");
+          avatar.className = "avatar";
+          avatar.setAttribute("aria-hidden", "true");
+          avatar.textContent = "CP";
+          row.appendChild(avatar);
+        }
+        const body = document.createElement("div");
+        body.className = "text";
+        body.textContent = text;
+        row.appendChild(body);
+        chatColumn.appendChild(row);
         chatLog.scrollTop = chatLog.scrollHeight;
-        return div;
+        return row;
       }
 
       function renderNav(role) {
@@ -214,16 +241,19 @@
         if (res.status === 200) {
           whoami.textContent = "cleaner";
           renderNav("cleaner");
+          renderSuggestions("cleaner");
           return;
         }
         whoami.textContent = "admin";
         renderNav("admin");
+        renderSuggestions("admin");
         chatAttach.hidden = false;
+        chatInputRow.classList.add("has-attach");
       }
 
       async function sendMessage(message, file) {
-        addBubble(message, "user");
-        const pending = addBubble("Thinking…", "bubble assistant pending");
+        addMessage(message, "user");
+        const pending = addMessage("Thinking…", "assistant pending");
         chatInput.disabled = true;
         chatForm.querySelector("button[type=submit]").disabled = true;
         try {
@@ -243,18 +273,15 @@
           pending.remove();
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
-            addBubble(body.error ?? "The assistant could not answer that.", "assistant error");
+            addMessage(body.error ?? "The assistant could not answer that.", "assistant error");
             return;
           }
           const body = await res.json();
-          addBubble(body.reply ?? "", "assistant");
-          if (file) {
-            chatFileInput.value = "";
-            chatFileName.textContent = "No file attached";
-          }
+          addMessage(body.reply ?? "", "assistant");
+          if (file) clearAttachment();
         } catch {
           pending.remove();
-          addBubble("Could not reach the server.", "assistant error");
+          addMessage("Could not reach the server.", "assistant error");
         } finally {
           chatInput.disabled = false;
           chatForm.querySelector("button[type=submit]").disabled = false;
@@ -262,11 +289,26 @@
         }
       }
 
+      chatAttach.addEventListener("click", () => chatFileInput.click());
+      chatFileRemove.addEventListener("click", () => {
+        clearAttachment();
+        setFileError("");
+        chatInput.focus();
+      });
+
       chatFileInput.addEventListener("change", () => {
         setFileError("");
         const file = chatFileInput.files?.[0];
-        chatFileName.textContent = file ? file.name : "No file attached";
+        if (!file) {
+          clearAttachment();
+          return;
+        }
+        chatFileName.textContent = file.name;
+        chatFileChip.hidden = false;
+        if (file.size > MAX_FILE_BYTES) setFileError("That file is too large (max 256 KB).");
       });
+
+      chatInput.addEventListener("input", autosize);
 
       chatForm.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -279,6 +321,7 @@
         }
         setFileError("");
         chatInput.value = "";
+        autosize();
         sendMessage(message, file).catch((err) => console.error(err));
       });
 

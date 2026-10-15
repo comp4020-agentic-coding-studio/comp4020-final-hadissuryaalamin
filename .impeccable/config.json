@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "public/style.css"
+        ],
+        "createdAt": "2026-10-15T07:08:40.260Z",
+        "reason": "matches reference site stayor.framer.website, which itself uses Inter (confirmed via page source); user asked to replicate that site's look"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "public/home.html"
+        ],
+        "createdAt": "2026-10-15T20:51:32.356Z",
+        "reason": "reference site stayor.framer.website uses Inter (page source); user asked to replicate it"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "public/home.html"
+        ],
+        "createdAt": "2026-10-15T20:51:32.527Z",
+        "reason": "palette copied from stayor.framer.website (#faf7f2/#fffdfa in its source); user viewed the reskin live and said 'looks good'"
+      }
+    ]
+  }
+}
