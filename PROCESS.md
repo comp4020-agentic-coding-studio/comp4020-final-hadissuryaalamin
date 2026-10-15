@@ -1,8 +1,9 @@
 # Process overview
 
-This is the crit 9 version of this file. Everything up to "Where this
-stood at crit 8" is unchanged from crit 8; the crit 9 work is in the last
-section. Read it as "what happened up to this point," not a running log.
+This is the crit 10 version of this file. Everything up to "Where this
+stood at crit 8" is unchanged from crit 8; crit 9 and crit 10 each have
+their own section at the end. Read it as "what happened up to this point,"
+not a running log.
 
 ## From brief to design
 
@@ -172,3 +173,30 @@ token and signing secret, and rotated both before going further.
 contract tests against a running instance, including the race invariant
 under the broadcast layer and the Slack webhook's signature checks. CI is
 green on `main` and the app is deployed.
+
+## Crit 10: telling people apart, and saying who did what
+
+Crit 10 hands the pod only the URL and asks me to narrate from the logs.
+The app already told people apart (a signed session cookie per person, with
+a role), and the server already enforced what each role may do. Two things
+were missing.
+
+**The access decision was enforced but never written down.** It is now
+[`docs/decisions/0002-access-control.md`](docs/decisions/0002-access-control.md):
+everyone sees the leaderboard and who owns which property, because the README's
+test for "good" is that a cleaner can see what they lost and to whom; a
+cleaner only ever acts on their own picks; the Admin manages the records but
+never claims. It lists the exact files where each rule is checked.
+
+**The logs said nothing about people.** Fastify's request log records a URL
+and an IP address, so two classmates claiming at once looked identical. A
+small `src/audit.ts` now writes one JSON line per change with the username,
+role, action, outcome and where it came from (page, assistant or Slack), and
+refused attempts are logged by name too. The claim race is the case that
+matters: the winner's line says `ok`, the loser's says `refused
+(already-claimed)`. The lines go to stdout, so on Fly they land in the
+platform log and outlive a machine restart. Passwords never reach it, and a
+unit test checks that.
+
+The UI also moved to a new look this week, after a reference site the
+client chose, and the assistant page was rebuilt around one docked composer.

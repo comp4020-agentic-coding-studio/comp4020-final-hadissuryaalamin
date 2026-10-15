@@ -74,7 +74,7 @@ export default async function slackRoutes(
         reply = NOT_LINKED_TEXT;
       } else {
         try {
-          reply = await runAssistant(text, { db, role: "cleaner", userId: cleaner.user_id });
+          reply = await runAssistant(text, { db, role: "cleaner", userId: cleaner.user_id, via: "slack" });
         } catch (err) {
           reply = err instanceof Error ? err.message : String(err);
         }

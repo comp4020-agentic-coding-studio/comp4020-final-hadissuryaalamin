@@ -16,6 +16,8 @@ import { setProposal, getProposal, clearProposal } from "./proposals.ts";
 import { parseReviewsCsv, parseCleanersCsv, parsePropertiesCsv } from "./csv.ts";
 import { capForRank } from "../ranking/index.ts";
 import type { CleanerRow, PickRow, PropertyRow } from "../db/types.ts";
+import { actorLabel, audit, type Outcome } from "../audit.ts";
+import { propertyLabel } from "../api/cleaner.ts";
 
 /** The `{ name, description, input_schema }` shape the Anthropic SDK's `tools` param expects. */
 export interface ToolSchema {
@@ -181,6 +183,8 @@ export interface RunToolContext {
   db: Database.Database;
   role: "cleaner" | "admin";
   userId: number;
+  /** Where the request came from, for the audit log. Defaults to "assistant" (the in-app chat). */
+  via?: "assistant" | "slack";
   /** The file the user attached to this message, if any. propose_*_from_file
    * tools read this directly -- never model-supplied input -- so a crafted
    * tool-call argument can never substitute its own CSV content. */
@@ -458,22 +462,40 @@ function releaseResultMessage(
 async function executePendingAction(ctx: RunToolContext): Promise<string> {
   const proposal = getProposal(ctx.userId);
   if (!proposal) return "Nothing pending to confirm.";
+  const log = (action: string, outcome: Outcome, detail: string) =>
+    audit({ ...actorLabel(ctx.db, ctx.userId), via: ctx.via ?? "assistant", action, outcome, detail });
 
   try {
     switch (proposal.type) {
       case "claim_property": {
         const data = proposal.data as { propertyId: number };
         const result = claimProperty(ctx.db, ctx.userId, data.propertyId);
+        log(
+          "claim",
+          result.ok ? "ok" : "refused",
+          result.ok
+            ? `${propertyLabel(ctx.db, data.propertyId)} into slot ${result.pick.slot}`
+            : `${propertyLabel(ctx.db, data.propertyId)} (${result.reason})`,
+        );
         return claimResultMessage(ctx.db, result);
       }
       case "release_property": {
         const data = proposal.data as { pickId: number };
+        const before = ctx.db.prepare("SELECT property_id FROM picks WHERE id = ?").get(data.pickId) as
+          | { property_id: number }
+          | undefined;
         const result = releaseProperty(ctx.db, ctx.userId, data.pickId);
+        log(
+          "release",
+          result.ok ? "ok" : "refused",
+          `${before ? propertyLabel(ctx.db, before.property_id) : `pick ${data.pickId}`}${result.ok ? "" : ` (${result.reason})`}`,
+        );
         return releaseResultMessage(ctx.db, result);
       }
       case "review_batch": {
         const data = proposal.data as { items: ReviewBatchItem[] };
         applyReviewBatch(ctx.db, data.items);
+        log("review-batch", "ok", `${data.items.length} review(s)`);
         return `Submitted ${data.items.length} review(s).`;
       }
       case "create_cleaners": {
@@ -488,6 +510,9 @@ async function executePendingAction(ctx: RunToolContext): Promise<string> {
             failed.push(row.username);
           }
         }
+        const createdNames = data.rows.map((r) => r.username).filter((n) => !failed.includes(n));
+        if (createdNames.length > 0) log("create-cleaner", "ok", createdNames.join(", "));
+        if (failed.length > 0) log("create-cleaner", "refused", `${failed.join(", ")} (username taken)`);
         let message = `Created ${created} cleaner account(s).`;
         if (failed.length > 0) {
           message += ` Failed (duplicate username): ${formatNameList(failed)}.`;
@@ -499,6 +524,7 @@ async function executePendingAction(ctx: RunToolContext): Promise<string> {
         for (const row of data.rows) {
           createProperty(ctx.db, row.name, row.address);
         }
+        log("create-property", "ok", data.rows.map((r) => `"${r.name}"`).join(", "));
         return `Created ${data.rows.length} propert${data.rows.length === 1 ? "y" : "ies"}.`;
       }
       default:

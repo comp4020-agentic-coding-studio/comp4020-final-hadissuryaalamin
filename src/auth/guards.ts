@@ -6,6 +6,8 @@ declare module "fastify" {
   interface FastifyRequest {
     /** Set by `requireAuth`/`requireRole` once the session cookie verifies. */
     session?: SessionPayload;
+    /** Set by `requireRole` when it 403s a signed-in user, so server.ts can log who was refused. */
+    roleRefused?: Role;
   }
 }
 
@@ -33,6 +35,8 @@ export function requireRole(role: Role) {
       return;
     }
     if (session.role !== role) {
+      request.session = session;
+      request.roleRefused = role;
       await reply.code(403).send({ error: "Forbidden" });
       return;
     }

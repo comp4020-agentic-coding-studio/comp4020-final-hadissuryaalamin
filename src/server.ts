@@ -25,6 +25,7 @@ import {
   seedAdminIfMissing,
 } from "./auth/index.ts";
 import { registerClient } from "./realtime/broadcast.ts";
+import { actorLabel, audit } from "./audit.ts";
 import adminRoutes from "./api/admin.ts";
 import cleanerRoutes from "./api/cleaner.ts";
 import assistantRoutes from "./api/assistant.ts";
@@ -61,6 +62,18 @@ export function buildApp(): ReturnType<typeof Fastify> {
     const session = verifySessionToken(token);
     if (session) {
       request.session = session;
+    }
+  });
+
+  app.addHook("onResponse", async (request) => {
+    if (request.roleRefused && request.session && request.method !== "GET") {
+      audit({
+        ...actorLabel(db, request.session.user_id),
+        via: "web",
+        action: `${request.method} ${request.routeOptions.url ?? request.url}`,
+        outcome: "refused",
+        detail: `needs ${request.roleRefused}`,
+      });
     }
   });
 
@@ -108,14 +121,13 @@ export function buildApp(): ReturnType<typeof Fastify> {
     }
 
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined;
-    if (!user) {
-      return reply.code(401).send({ error: "Invalid username or password" });
-    }
-    const valid = await verifyPassword(password, user.password_hash);
-    if (!valid) {
+    const valid = user ? await verifyPassword(password, user.password_hash) : false;
+    if (!user || !valid) {
+      audit({ actor: username, role: user?.role ?? "unknown", via: "web", action: "login", outcome: "refused", detail: "wrong username or password" });
       return reply.code(401).send({ error: "Invalid username or password" });
     }
 
+    audit({ actor: user.username, role: user.role, via: "web", action: "login", outcome: "ok", detail: "signed in" });
     const token = createSessionToken({ user_id: user.id, role: user.role });
     reply.header("set-cookie", buildSessionCookieHeader(token));
     return reply.send({ user_id: user.id, username: user.username, role: user.role });
@@ -123,7 +135,10 @@ export function buildApp(): ReturnType<typeof Fastify> {
 
   // POST /logout — clears the session cookie. No auth required to call it
   // (clearing an already-absent cookie is harmless).
-  app.post("/logout", async (_request, reply) => {
+  app.post("/logout", async (request, reply) => {
+    if (request.session) {
+      audit({ ...actorLabel(db, request.session.user_id), via: "web", action: "logout", outcome: "ok", detail: "signed out" });
+    }
     reply.header("set-cookie", buildClearSessionCookieHeader());
     return reply.send({ ok: true });
   });

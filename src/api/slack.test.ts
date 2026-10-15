@@ -176,7 +176,12 @@ describe("POST /api/slack/events", () => {
     expect(res.statusCode).toBe(200);
     await h.posted;
     expect(h.runAssistant).toHaveBeenCalledTimes(1);
-    expect(h.runAssistant).toHaveBeenCalledWith("can I have 12 Smith St?", { db: h.db, role: "cleaner", userId });
+    expect(h.runAssistant).toHaveBeenCalledWith("can I have 12 Smith St?", {
+      db: h.db,
+      role: "cleaner",
+      userId,
+      via: "slack",
+    });
     expect(h.postThreadReply).toHaveBeenCalledWith(CHANNEL, "1700000000.000100", "assistant says hi");
   });
 

@@ -11,6 +11,12 @@ import { requireAuth } from "../auth/index.ts";
 import { activePeriod, capForRank, computeScore, type PeriodedReview, type Rank } from "../ranking/index.ts";
 import type { CleanerRow, PickRow, PropertyRow } from "../db/types.ts";
 import { broadcast } from "../realtime/broadcast.ts";
+import { actorLabel, audit } from "../audit.ts";
+
+export function propertyLabel(db: Database.Database, propertyId: number): string {
+  const row = db.prepare("SELECT name FROM properties WHERE id = ?").get(propertyId) as { name: string } | undefined;
+  return row ? `property ${propertyId} "${row.name}"` : `property ${propertyId}`;
+}
 
 /** Order used to sort the leaderboard response by tier (legend first). */
 const RANK_ORDER: Record<Rank, number> = { legend: 0, awesome: 1, normal: 2 };
@@ -193,16 +199,25 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
     "/api/picks",
     authed,
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = request.session!.user_id;
+      const who = actorLabel(db, userId);
       if (request.session!.role !== "cleaner") {
+        audit({ ...who, via: "web", action: "claim", outcome: "refused", detail: "only cleaners can claim" });
         return reply.code(403).send({ error: "Forbidden" });
       }
-      const userId = request.session!.user_id;
       const propertyId = (request.body as { property_id?: number } | undefined)?.property_id;
       if (typeof propertyId !== "number") {
         return reply.code(400).send({ error: "property_id is required" });
       }
 
       const result = claimProperty(db, userId, propertyId);
+      audit({
+        ...who,
+        via: "web",
+        action: "claim",
+        outcome: result.ok ? "ok" : "refused",
+        detail: result.ok ? `${propertyLabel(db, propertyId)} into slot ${result.pick.slot}` : `${propertyLabel(db, propertyId)} (${result.reason})`,
+      });
       if (!result.ok) {
         const status: Record<ClaimFailureReason, number> = {
           forbidden: 403,
@@ -228,7 +243,15 @@ export default async function cleanerRoutes(app: FastifyInstance, opts: { db: Da
     async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = request.session!.user_id;
       const id = Number((request.params as { id: string }).id);
+      const before = db.prepare("SELECT property_id FROM picks WHERE id = ?").get(id) as { property_id: number } | undefined;
       const result = releaseProperty(db, userId, id);
+      audit({
+        ...actorLabel(db, userId),
+        via: "web",
+        action: "release",
+        outcome: result.ok ? "ok" : "refused",
+        detail: `${before ? propertyLabel(db, before.property_id) : `pick ${id}`}${result.ok ? "" : ` (${result.reason})`}`,
+      });
       if (!result.ok) {
         const status: Record<ReleaseFailureReason, number> = { "not-found": 404, forbidden: 403 };
         const message: Record<ReleaseFailureReason, string> = { "not-found": "Not found", forbidden: "Forbidden" };

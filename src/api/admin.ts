@@ -19,6 +19,12 @@ import {
   type Rank,
 } from "../ranking/index.ts";
 import type { CleanerRow, PropertyRow } from "../db/types.ts";
+import { actorLabel, audit, type Outcome } from "../audit.ts";
+
+function usernameOf(db: Database.Database, userId: number): string {
+  const row = db.prepare("SELECT username FROM users WHERE id = ?").get(userId) as { username: string } | undefined;
+  return row ? row.username : `cleaner ${userId}`;
+}
 
 /** "YYYY-MM" for right now — the active review-batch period. */
 function currentPeriod(): string {
@@ -140,6 +146,8 @@ export function getReviewsSummary(db: Database.Database) {
 export default async function adminRoutes(app: FastifyInstance, opts: { db: Database.Database }): Promise<void> {
   const { db } = opts;
   const adminOnly = { preHandler: requireRole("admin") };
+  const log = (request: FastifyRequest, action: string, outcome: Outcome, detail: string) =>
+    audit({ ...actorLabel(db, request.session!.user_id), via: "web", action, outcome, detail });
 
   app.post<{ Body: { name: string; address: string } }>(
     "/api/properties",
@@ -150,6 +158,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
         return reply.code(400).send({ error: "name and address are required" });
       }
       const row = createProperty(db, name, address);
+      log(request, "create-property", "ok", `property ${row.id} "${row.name}"`);
       return reply.code(201).send(row);
     },
   );
@@ -169,6 +178,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       const address = request.body?.address ?? existing.address;
       db.prepare("UPDATE properties SET name = ?, address = ? WHERE id = ?").run(name, address, id);
       const row = db.prepare("SELECT * FROM properties WHERE id = ?").get(id) as PropertyRow;
+      log(request, "edit-property", "ok", `property ${id} "${existing.name}" -> "${row.name}", ${row.address}`);
       return reply.send(row);
     },
   );
@@ -185,6 +195,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
         return reply.code(404).send({ error: "Not found" });
       }
       db.prepare("DELETE FROM properties WHERE id = ?").run(id);
+      log(request, "delete-property", "ok", `property ${id} "${existing.name}"`);
       return reply.code(204).send();
     },
   );
@@ -200,8 +211,10 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       try {
         const result = await createCleanerAccount(db, { username, password });
         const row = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(result.user_id) as CleanerRow;
+        log(request, "create-cleaner", "ok", username);
         return reply.code(201).send({ ...result, rank: row.rank });
       } catch {
+        log(request, "create-cleaner", "refused", `${username} (username taken)`);
         return reply.code(409).send({ error: "Username already taken" });
       }
     },
@@ -217,6 +230,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       }
       const period = currentPeriod();
       applyReviewBatch(db, body);
+      log(request, "review-batch", "ok", `${body.length} review(s) for ${period}`);
 
       return reply.code(200).send({ period, count: body.length });
     },
@@ -244,6 +258,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       });
       run(rank as Rank);
       broadcast({ type: "ranks:changed" });
+      log(request, "set-rank", "ok", `${usernameOf(db, cleanerId)} ${existing.rank} -> ${rank}`);
 
       const row = db.prepare("SELECT * FROM cleaners WHERE user_id = ?").get(cleanerId) as CleanerRow;
       return reply.send(row);
@@ -265,6 +280,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       // Children first (no ON DELETE CASCADE on these FKs), then the
       // leaderboard is recomputed over the now-smaller cleaner pool —
       // removing someone can shift the legend/awesome cap boundary.
+      const name = usernameOf(db, cleanerId);
       const run = db.transaction((id: number) => {
         db.prepare("DELETE FROM picks WHERE cleaner_id = ?").run(id);
         db.prepare("DELETE FROM reviews WHERE cleaner_id = ?").run(id);
@@ -273,6 +289,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
         recomputeAndApply(db);
       });
       run(cleanerId);
+      log(request, "delete-cleaner", "ok", name);
 
       return reply.code(204).send();
     },
@@ -329,6 +346,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       }
 
       db.prepare("UPDATE cleaners SET slack_user_id = ? WHERE user_id = ?").run(slackId, cleanerId);
+      log(request, "link-slack", "ok", `${usernameOf(db, cleanerId)} -> ${slackId ?? "unlinked"}`);
       return reply.send(slackRowFor.get(cleanerId));
     },
   );
