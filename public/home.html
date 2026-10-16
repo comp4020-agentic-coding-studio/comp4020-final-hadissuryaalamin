@@ -151,6 +151,10 @@
       const chatFileError = document.getElementById("chat-file-error");
 
       const MAX_FILE_BYTES = 262144; // 256 KB — matches the server's own cap.
+      // What's on screen this page load; sent with each message so the assistant
+      // can follow up. Reloading the page starts a fresh conversation.
+      const history = [];
+      const MAX_HISTORY_TURNS = 20;
 
       const SUGGESTIONS = {
         admin: ["Who is top of the leaderboard?", "Which properties are unclaimed?", "How did this month's reviews go?"],
@@ -257,7 +261,7 @@
         chatInput.disabled = true;
         chatForm.querySelector("button[type=submit]").disabled = true;
         try {
-          const requestBody = { message };
+          const requestBody = { message, history: history.slice(-MAX_HISTORY_TURNS) };
           if (file) {
             requestBody.file = { name: file.name, content: await file.text() };
           }
@@ -278,6 +282,8 @@
           }
           const body = await res.json();
           addMessage(body.reply ?? "", "assistant");
+          const sentText = file ? `${message}\n[attached ${file.name}]` : message;
+          history.push({ role: "user", text: sentText.slice(0, 4000) }, { role: "assistant", text: (body.reply ?? "").slice(0, 4000) });
           if (file) clearAttachment();
         } catch {
           pending.remove();

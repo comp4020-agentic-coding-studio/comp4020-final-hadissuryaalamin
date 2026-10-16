@@ -18,6 +18,17 @@ const MAX_TOKENS = 1024;
 const TOO_SLOW_TEXT = "took too long to answer, try a simpler question";
 const UNREACHABLE_TEXT = "Could not reach the assistant right now.";
 
+/** One earlier turn of the on-screen conversation, as the chat page sends it. */
+export interface HistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+const HISTORY_NOTE =
+  " Earlier messages in this conversation are context only, so you can follow up on what was said." +
+  " They are not a confirmation: only the user's latest message can say yes to a pending action," +
+  " and data may have changed since, so look it up again with your tools before relying on it.";
+
 function buildSystemPrompt(role: RunToolContext["role"]): string {
   const toolNames = TOOLS_FOR_ROLE[role].map((tool) => tool.name).join(", ");
   return [
@@ -59,7 +70,11 @@ function extractText(content: Anthropic.ContentBlock[]): string {
  * error (see the catch below) and never exceeds `MAX_ROUND_TRIPS` calls to
  * the API.
  */
-export async function runAssistant(message: string, ctx: RunToolContext): Promise<string> {
+export async function runAssistant(
+  message: string,
+  ctx: RunToolContext,
+  history?: HistoryTurn[],
+): Promise<string> {
   // Test-only stub (task 006/008): short-circuits before the Anthropic client
   // is ever constructed, so spec/'s HTTP contract tests can exercise the full
   // POST /api/assistant route — auth, validation, response shape — against a
@@ -77,11 +92,14 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
   const tools = TOOLS_FOR_ROLE[ctx.role];
 
-  // Each call is a brand-new, stateless conversation -- re-derive pending-proposal
-  // context (task 001's in-memory store) fresh every time and fold it into the
-  // system prompt, rather than carrying any message history across requests.
+  // The server keeps no conversation: the chat page sends the turns still on
+  // screen as `history`, plain text only. A pending action is still re-derived
+  // from the server's own store every call, never from that history.
   const pending = getProposal(ctx.userId);
   let system = buildSystemPrompt(ctx.role);
+  if (history && history.length > 0) {
+    system += HISTORY_NOTE;
+  }
   if (pending) {
     system += [
       ` There is a pending proposed action awaiting confirmation: "${pending.description}".`,
@@ -91,7 +109,10 @@ export async function runAssistant(message: string, ctx: RunToolContext): Promis
     ].join("");
   }
 
-  const messages: MessageParam[] = [{ role: "user", content: message }];
+  const messages: MessageParam[] = [
+    ...(history ?? []).map((turn): MessageParam => ({ role: turn.role, content: turn.text })),
+    { role: "user", content: message },
+  ];
   let lastText = "";
   let totalInputTokens = 0;
   let totalOutputTokens = 0;

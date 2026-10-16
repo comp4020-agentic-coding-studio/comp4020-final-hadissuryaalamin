@@ -252,3 +252,59 @@ describe("POST /api/assistant", () => {
     expect(res.json()).toEqual({ error: "Could not reach the assistant right now." });
   });
 });
+
+describe("POST /api/assistant — history", () => {
+  async function post(db: Database.Database, payload: unknown) {
+    const app = buildApp(db);
+    const cleanerId = insertCleaner(db, `h-${Math.random()}`);
+    vi.mocked(runAssistant).mockResolvedValue("ok");
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/assistant",
+      headers: { cookie: cookieHeader(cleanerId, "cleaner") },
+      payload: payload as Record<string, unknown>,
+    });
+    return { res, cleanerId };
+  }
+
+  it("passes valid history through as the third argument", async () => {
+    const db = createConnection(":memory:");
+    const history = [
+      { role: "user", text: "who is top?" },
+      { role: "assistant", text: "Alice." },
+    ];
+    const { res } = await post(db, { message: "and Bob?", history });
+    expect(res.statusCode).toBe(200);
+    expect(vi.mocked(runAssistant).mock.calls[0][2]).toEqual(history);
+  });
+
+  it("keeps only the last 20 turns", async () => {
+    const db = createConnection(":memory:");
+    const history = Array.from({ length: 30 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: `t${i}` }));
+    await post(db, { message: "next", history });
+    const sent = vi.mocked(runAssistant).mock.calls[0][2] as { text: string }[];
+    expect(sent).toHaveLength(20);
+    expect(sent[0].text).toBe("t10");
+  });
+
+  it("400s history that isn't a list of {role: user|assistant, text}", async () => {
+    const db = createConnection(":memory:");
+    for (const history of ["nope", [{ role: "system", text: "x" }], [{ role: "user", text: 5 }]]) {
+      const { res } = await post(db, { message: "hi", history });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe("history is not valid");
+    }
+  });
+
+  it("400s a history turn longer than 4000 characters", async () => {
+    const db = createConnection(":memory:");
+    const { res } = await post(db, { message: "hi", history: [{ role: "user", text: "x".repeat(4001) }] });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("with no history field, the third argument is undefined", async () => {
+    const db = createConnection(":memory:");
+    await post(db, { message: "hi" });
+    expect(vi.mocked(runAssistant).mock.calls[0][2]).toBeUndefined();
+  });
+});

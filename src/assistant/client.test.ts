@@ -277,3 +277,42 @@ describe("runAssistant — SDK errors never leak", () => {
     }
   });
 });
+
+describe("runAssistant — conversation history", () => {
+  it("sends earlier turns before the new message, oldest first", async () => {
+    createMock.mockResolvedValueOnce(textResponse("Bob has 4.61."));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-h1");
+
+    await runAssistant("what about Bob?", { db, role: "cleaner", userId }, [
+      { role: "user", text: "who is top?" },
+      { role: "assistant", text: "Alice is top with 4.83." },
+    ]);
+
+    expect(createMock.mock.calls[0][0].messages).toEqual([
+      { role: "user", content: "who is top?" },
+      { role: "assistant", content: "Alice is top with 4.83." },
+      { role: "user", content: "what about Bob?" },
+    ]);
+  });
+
+  it("with no history, sends only the new message (unchanged behaviour)", async () => {
+    createMock.mockResolvedValueOnce(textResponse("hi"));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-h2");
+
+    await runAssistant("hello", { db, role: "cleaner", userId });
+
+    expect(createMock.mock.calls[0][0].messages).toEqual([{ role: "user", content: "hello" }]);
+  });
+
+  it("tells the model earlier turns are context only, not confirmations", async () => {
+    createMock.mockResolvedValueOnce(textResponse("ok"));
+    const db = createConnection(":memory:");
+    const userId = insertCleaner(db, "cleaner-h3");
+
+    await runAssistant("and now?", { db, role: "cleaner", userId }, [{ role: "user", text: "yes" }]);
+
+    expect(createMock.mock.calls[0][0].system).toContain("Earlier messages in this conversation are context only");
+  });
+});
