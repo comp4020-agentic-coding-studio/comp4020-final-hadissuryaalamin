@@ -153,10 +153,18 @@ export function buildApp(): ReturnType<typeof Fastify> {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>About</title>
+    <title>About this app</title>
+    <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <main>
+  <body class="readme-body">
+    <header class="topbar">
+      <div class="brand-group">
+        <a href="/" class="brand-mark" aria-label="Back to the app">CP</a>
+        <span class="muted">About this app</span>
+      </div>
+      <a href="/">Back to the app</a>
+    </header>
+    <main class="card readme">
 ${body}
     </main>
   </body>

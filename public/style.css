@@ -329,3 +329,28 @@ body.narrow footer { border-top: 0; text-align: center; margin-top: 1.25rem; }
 .slack-cell form { margin: 0; flex-wrap: nowrap; align-items: center; }
 .slack-cell input { flex: 1 1 8rem; min-width: 0; }
 .slack-cell .status { margin: 0.35rem 0 0; }
+
+/* /readme/ — README.md rendered server-side (src/server.ts) */
+body.readme-body { max-width: 50rem; }
+.card.readme { padding: 2rem 2.25rem 2.25rem; display: block; }
+.readme h1 { font-size: 2.2rem; margin: 0 0 1.25rem; }
+.readme h2 {
+  font-family: var(--font-heading); font-style: italic; font-weight: 500;
+  font-size: 1.45rem; letter-spacing: -0.005em;
+  margin: 2.25rem 0 0.6rem; padding: 1.5rem 0 0; border-top: 1px solid var(--border); border-bottom: 0;
+}
+.readme h1 + p, .readme h1 + p + p { font-size: 1.05rem; }
+.readme p, .readme li { line-height: 1.65; max-width: 68ch; }
+.readme ul, .readme ol { padding-left: 1.25rem; }
+.readme strong { font-weight: 650; }
+.readme pre {
+  background: var(--surface-sunk); border: 1px solid var(--border); border-radius: 0.6rem;
+  padding: 0.85rem 1rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.readme pre code { background: none; padding: 0; font-size: inherit; }
+.readme p code { overflow-wrap: anywhere; }
+@media (max-width: 30rem) {
+  .card.readme { padding: 1.25rem 1.1rem 1.5rem; }
+  .readme h1 { font-size: 1.7rem; }
+  .readme h2 { font-size: 1.25rem; margin-top: 1.75rem; padding-top: 1.25rem; }
+}
