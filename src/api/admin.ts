@@ -42,6 +42,15 @@ function isReviewBatchItem(value: unknown): value is ReviewBatchItem {
   return typeof v.cleaner_id === "number" && typeof v.stars === "number";
 }
 
+/** True if another property already has this name, ignoring case and surrounding spaces. */
+export function propertyNameTaken(db: Database.Database, name: string, excludeId?: number): boolean {
+  return (
+    db
+      .prepare("SELECT 1 FROM properties WHERE lower(trim(name)) = lower(trim(?)) AND id != ?")
+      .get(name, excludeId ?? -1) !== undefined
+  );
+}
+
 /** Inserts a property row and returns it — the body of `POST /api/properties`,
  * extracted so the assistant's `propose_create_properties_from_file` /
  * `execute_pending_action` path (task 004) can call it directly. */
@@ -157,6 +166,10 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       if (typeof name !== "string" || typeof address !== "string") {
         return reply.code(400).send({ error: "name and address are required" });
       }
+      if (propertyNameTaken(db, name)) {
+        log(request, "create-property", "refused", `"${name}" (name taken)`);
+        return reply.code(409).send({ error: `A property named "${name.trim()}" already exists.` });
+      }
       const row = createProperty(db, name, address);
       log(request, "create-property", "ok", `property ${row.id} "${row.name}"`);
       return reply.code(201).send(row);
@@ -176,6 +189,10 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       }
       const name = request.body?.name ?? existing.name;
       const address = request.body?.address ?? existing.address;
+      if (propertyNameTaken(db, name, id)) {
+        log(request, "edit-property", "refused", `property ${id} -> "${name}" (name taken)`);
+        return reply.code(409).send({ error: `A property named "${name.trim()}" already exists.` });
+      }
       db.prepare("UPDATE properties SET name = ?, address = ? WHERE id = ?").run(name, address, id);
       const row = db.prepare("SELECT * FROM properties WHERE id = ?").get(id) as PropertyRow;
       log(request, "edit-property", "ok", `property ${id} "${existing.name}" -> "${row.name}", ${row.address}`);

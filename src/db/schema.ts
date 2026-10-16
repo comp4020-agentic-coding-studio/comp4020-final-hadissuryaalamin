@@ -69,6 +69,19 @@ export function migrate(db: Database.Database): void {
     db.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_cleaners_slack_user_id ON cleaners(slack_user_id)",
     );
+    // Property names are unique ignoring case and surrounding spaces. A database
+    // that already holds duplicates can't take the index, so it boots without it
+    // until they're removed; the app-level check in api/admin.ts still applies.
+    const duplicateNames = db
+      .prepare("SELECT 1 FROM properties GROUP BY lower(trim(name)) HAVING COUNT(*) > 1 LIMIT 1")
+      .get();
+    if (duplicateNames) {
+      console.warn("properties: duplicate names present, unique-name index not created");
+    } else {
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_name ON properties(lower(trim(name)))",
+      );
+    }
   });
   run();
 }

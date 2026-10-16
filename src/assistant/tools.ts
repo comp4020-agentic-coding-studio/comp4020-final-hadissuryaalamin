@@ -10,7 +10,13 @@
 
 import type Database from "better-sqlite3";
 import { getMyStatus, getLeaderboard, getPropertiesList, claimProperty, releaseProperty } from "../api/cleaner.ts";
-import { getReviewsSummary, createProperty, applyReviewBatch, type ReviewBatchItem } from "../api/admin.ts";
+import {
+  getReviewsSummary,
+  createProperty,
+  applyReviewBatch,
+  propertyNameTaken,
+  type ReviewBatchItem,
+} from "../api/admin.ts";
 import { createCleanerAccount } from "../auth/index.ts";
 import { setProposal, getProposal, clearProposal } from "./proposals.ts";
 import { parseReviewsCsv, parseCleanersCsv, parsePropertiesCsv } from "./csv.ts";
@@ -337,6 +343,26 @@ function proposeCreateCleanersFromFile(ctx: RunToolContext): string {
   return description;
 }
 
+/** Splits rows into ones that can be created and names that already exist (in the DB or earlier in `rows`). */
+function splitNewProperties(
+  db: Database.Database,
+  rows: { name: string; address: string }[],
+): { fresh: { name: string; address: string }[]; taken: string[] } {
+  const seen = new Set<string>();
+  const fresh: { name: string; address: string }[] = [];
+  const taken: string[] = [];
+  for (const row of rows) {
+    const key = row.name.trim().toLowerCase();
+    if (seen.has(key) || propertyNameTaken(db, row.name)) {
+      taken.push(row.name);
+    } else {
+      seen.add(key);
+      fresh.push(row);
+    }
+  }
+  return { fresh, taken };
+}
+
 /**
  * Parses `ctx.attachedFile` (never model input) as a `name,address` CSV and
  * stores a `create_properties` proposal describing the parse result. Stores
@@ -345,11 +371,18 @@ function proposeCreateCleanersFromFile(ctx: RunToolContext): string {
 function proposeCreatePropertiesFromFile(ctx: RunToolContext): string {
   if (!ctx.attachedFile) return NO_FILE_MESSAGE;
 
-  const { rows, invalidLines } = parsePropertiesCsv(ctx.attachedFile.content);
+  const parsed = parsePropertiesCsv(ctx.attachedFile.content);
+  const { fresh: rows, taken } = splitNewProperties(ctx.db, parsed.rows);
 
   let description = `Create ${rows.length} propert${rows.length === 1 ? "y" : "ies"} from ${ctx.attachedFile.name}.`;
-  if (invalidLines.length > 0) {
-    description += ` Skipped ${invalidLines.length} invalid line(s).`;
+  if (parsed.invalidLines.length > 0) {
+    description += ` Skipped ${parsed.invalidLines.length} invalid line(s).`;
+  }
+  if (taken.length > 0) {
+    description += ` Left out, already exist: ${formatNameList(taken)}.`;
+  }
+  if (rows.length === 0) {
+    return description + " Nothing new to create.";
   }
 
   setProposal(ctx.userId, "create_properties", { rows }, description);
@@ -405,10 +438,16 @@ function proposeCreateProperties(ctx: RunToolContext, input: Record<string, unkn
     return "No valid name/address rows were given.";
   }
 
-  const description = `Create ${rows.length} propert${rows.length === 1 ? "y" : "ies"}: ${formatNameList(
-    rows.map((r) => r.name),
-  )}.`;
-  setProposal(ctx.userId, "create_properties", { rows }, description);
+  const { fresh, taken } = splitNewProperties(ctx.db, rows);
+  const takenNote = taken.length > 0 ? ` Left out, already exist: ${formatNameList(taken)}.` : "";
+  if (fresh.length === 0) {
+    return `Nothing new to create.${takenNote}`;
+  }
+
+  const description = `Create ${fresh.length} propert${fresh.length === 1 ? "y" : "ies"}: ${formatNameList(
+    fresh.map((r) => r.name),
+  )}.${takenNote}`;
+  setProposal(ctx.userId, "create_properties", { rows: fresh }, description);
   return description;
 }
 
@@ -521,11 +560,15 @@ async function executePendingAction(ctx: RunToolContext): Promise<string> {
       }
       case "create_properties": {
         const data = proposal.data as { rows: { name: string; address: string }[] };
-        for (const row of data.rows) {
+        const { fresh, taken } = splitNewProperties(ctx.db, data.rows);
+        for (const row of fresh) {
           createProperty(ctx.db, row.name, row.address);
         }
-        log("create-property", "ok", data.rows.map((r) => `"${r.name}"`).join(", "));
-        return `Created ${data.rows.length} propert${data.rows.length === 1 ? "y" : "ies"}.`;
+        if (fresh.length > 0) log("create-property", "ok", fresh.map((r) => `"${r.name}"`).join(", "));
+        if (taken.length > 0) log("create-property", "refused", `${taken.join(", ")} (name taken)`);
+        let message = `Created ${fresh.length} propert${fresh.length === 1 ? "y" : "ies"}.`;
+        if (taken.length > 0) message += ` Skipped, already exist: ${formatNameList(taken)}.`;
+        return message;
       }
       default:
         return "That pending action is no longer supported.";
