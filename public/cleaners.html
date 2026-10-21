@@ -3,30 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cleaners</title>
+    <title>Cleaners · StayCrew</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Cleaners</h1>
+  <body data-page="cleaners" data-role="admin">
+    <section class="hero">
+      <div class="hero-main">
+        <span class="hero-icon" id="hero-icon"></span>
+        <div class="hero-text">
+          <span class="eyebrow">Crew</span>
+          <h1>Cleaners</h1>
+          <p class="hero-sub">Create accounts, override a rank, link Slack.</p>
+        </div>
       </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
-      </div>
-    </header>
-
-    <nav class="tabs">
-      <a href="/admin.html">Dashboard</a>
-      <a href="/cleaners.html" aria-current="true">Cleaners</a>
-      <a href="/properties.html">Properties</a>
-      <a href="/reviews.html">Reviews</a>
-    </nav>
+      <dl class="hero-stats">
+        <div><dt>Legend</dt><dd id="hs-legend">—</dd></div>
+        <div><dt>Awesome</dt><dd id="hs-awesome">—</dd></div>
+        <div><dt>Slack linked</dt><dd id="hs-slack">—</dd></div>
+      </dl>
+    </section>
 
     <section class="card">
-      <h2>Create a cleaner account</h2>
+      <h2 class="card-title" id="create-title"></h2>
       <form id="add-cleaner-form" class="inline-form">
         <label>Username <input type="text" name="username" autocomplete="off" required /></label>
         <label>Password <input type="password" name="password" autocomplete="new-password" required /></label>
@@ -35,42 +33,49 @@
       <p id="cleaner-status" class="status" role="status"></p>
     </section>
 
-    <section id="cleaners-section" class="card">
-      <h2>All cleaners</h2>
-      <p class="muted">Changing a rank here is a manual override. The next review batch recomputes ranks and can overwrite it.</p>
-      <p class="muted">Slack member ID: in Slack, open the person's profile, choose the three-dot menu, then "Copy member ID" (looks like U0123ABCD). Leave it empty and save to unlink.</p>
+    <section id="cleaners-section" class="card flush">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title" id="all-title"></h2>
+          <p>A rank change here is a manual override. The next review batch recomputes ranks and can overwrite it.</p>
+        </div>
+      </div>
+      <div class="note" style="margin: 0 1.5rem" id="slack-note">
+        <p>Slack member ID: in Slack, open the person's profile, choose the three-dot menu, then "Copy member ID" (looks like <code>U0123ABCD</code>). Leave it empty and save to unlink.</p>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Username</th><th>Rank</th><th class="num">Score</th>
+              <th>Cleaner</th><th>Rank</th><th class="num">Score</th><th>Slots</th>
               <th>Preferred properties</th><th>Slack member ID</th><th><span class="visually-hidden">Actions</span></th>
             </tr>
           </thead>
           <tbody id="cleaners-body"></tbody>
         </table>
       </div>
+      <p id="cleaners-empty" class="empty" style="margin: 0 1.5rem 1.5rem" hidden>No cleaners yet. Create the first account above.</p>
     </section>
 
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
+      const { icon, avatar, slotDots, escapeHtml, capFor } = StayCrew;
       const cleanersBody = document.getElementById("cleaners-body");
       const cleanerStatus = document.getElementById("cleaner-status");
       const TRASH_ICON =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+
+      document.getElementById("hero-icon").innerHTML = icon("users");
+      document.getElementById("create-title").innerHTML = icon("plus") + "Create a cleaner account";
+      document.getElementById("all-title").innerHTML = icon("users") + "All cleaners";
+      document.getElementById("slack-note").insertAdjacentHTML("afterbegin", icon("link"));
 
       function setStatus(el, text, kind) {
         el.textContent = text;
         el.className = "status" + (kind ? " " + kind : "");
-      }
-
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
       }
 
       async function api(path, options) {
@@ -96,7 +101,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        StayCrew.setUser("admin", "admin");
       }
 
       async function loadCleaners() {
@@ -129,6 +134,7 @@
         const save = document.createElement("button");
         save.type = "submit";
         save.textContent = "Save";
+        save.className = "ghost";
         save.setAttribute("aria-label", `Save Slack member ID for ${cleaner.username}`);
         const msg = document.createElement("p");
         msg.className = "status";
@@ -168,17 +174,22 @@
           byOwner.get(property.owner).push(property.name);
         }
 
+        const tiers = { legend: 0, awesome: 0, normal: 0 };
+        for (const c of cleaners) tiers[c.rank] = (tiers[c.rank] ?? 0) + 1;
+        document.getElementById("hs-legend").textContent = tiers.legend;
+        document.getElementById("hs-awesome").textContent = tiers.awesome;
+        const linked = cleaners.filter((c) => slackByUser.get(c.cleaner_id)).length;
+        document.getElementById("hs-slack").innerHTML = `${linked}<small> / ${cleaners.length}</small>`;
+        document.getElementById("cleaners-empty").hidden = cleaners.length > 0;
+
         cleanersBody.innerHTML = "";
         for (const cleaner of cleaners) {
           const tr = document.createElement("tr");
-          const scoreText =
-            cleaner.score === null || cleaner.score === undefined ? "—" : cleaner.score.toFixed(2);
+          const scored = cleaner.score !== null && cleaner.score !== undefined;
           const owned = byOwner.get(cleaner.username) ?? [];
-          const propsText = owned.length
-            ? owned.map(escapeHtml).join(", ")
-            : '<span class="muted">none</span>';
+          const propsText = owned.length ? owned.map(escapeHtml).join(", ") : '<span class="muted">none</span>';
           tr.innerHTML = `
-            <td>${escapeHtml(cleaner.username)}</td>
+            <td><div class="who-cell">${avatar(cleaner.username)}<strong>${escapeHtml(cleaner.username)}</strong></div></td>
             <td>
               <select data-rank aria-label="Rank for ${escapeHtml(cleaner.username)}">
                 <option value="legend">legend</option>
@@ -186,7 +197,8 @@
                 <option value="normal">normal</option>
               </select>
             </td>
-            <td class="num">${scoreText}</td>
+            <td class="num"><span class="score${scored ? "" : " none"}">${scored ? cleaner.score.toFixed(2) : "—"}</span></td>
+            <td>${slotDots(owned.length, capFor(cleaner.rank))}</td>
             <td>${propsText}</td>
             <td data-slack-slot></td>
             <td class="actions">
@@ -283,9 +295,11 @@
         location.href = "/";
       });
 
-      // Live updates (public/realtime.js): a rank recompute/override
-      // anywhere re-runs the same refreshAll() the page loads with.
+      // Live updates (public/realtime.js): a rank change or a claim anywhere
+      // re-runs the same refreshAll() the page loads with.
       onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
+      onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
 
       (async () => {
         try {

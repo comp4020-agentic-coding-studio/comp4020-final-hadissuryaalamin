@@ -3,79 +3,104 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cleaner dashboard</title>
+    <title>My properties · StayCrew</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Cleaner dashboard</h1>
-      </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
-      </div>
-    </header>
-
-    <section id="me-section" class="card">
-      <h2>My standing</h2>
-      <dl class="standing" id="me-summary" aria-live="polite">
-        <div><dt>Rank</dt><dd id="me-rank">…</dd></div>
-        <div><dt>Score</dt><dd id="me-score">…</dd></div>
-        <div><dt>Free slots</dt><dd id="me-slots">…</dd></div>
-      </dl>
-      <h3>My picks</h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Slot</th><th>Property</th><th>Address</th><th><span class="visually-hidden">Actions</span></th></tr>
-          </thead>
-          <tbody id="my-picks-body"></tbody>
-        </table>
-      </div>
-      <p id="picks-empty" class="muted" hidden>No properties claimed yet. Claim one from the list below.</p>
-    </section>
-
-    <section id="properties-section" class="card">
-      <h2>Unclaimed properties</h2>
-      <p id="claim-status" class="status" role="status"></p>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Address</th><th><span class="visually-hidden">Actions</span></th></tr>
-          </thead>
-          <tbody id="unclaimed-body"></tbody>
-        </table>
-      </div>
-      <p id="unclaimed-empty" class="muted" hidden>Nothing unclaimed right now.</p>
-    </section>
-
-    <section id="leaderboard-section" class="card">
-      <h2>Leaderboard</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th></tr>
-          </thead>
-          <tbody id="leaderboard-body"></tbody>
-        </table>
+  <body data-page="cleaner" data-role="cleaner">
+    <section id="me-section" class="card standing-card">
+      <div class="standing">
+        <div class="standing-who">
+          <span id="me-avatar"></span>
+          <div>
+            <h1 id="me-name" style="font-size: 1.6rem">…</h1>
+            <div class="meta" id="me-summary" aria-live="polite">
+              <span id="me-rank"></span>
+              <span id="me-score"></span>
+            </div>
+          </div>
+        </div>
+        <div class="capacity" aria-live="polite">
+          <div class="capacity-head"><span>Slot capacity</span><strong id="me-slots">…</strong></div>
+          <span class="segments" id="me-segments"></span>
+          <div class="capacity-foot"><span id="me-cap-note"></span><b id="me-free"></b></div>
+        </div>
       </div>
     </section>
+
+    <div class="grid-2">
+      <div class="stack">
+        <div class="filter-row">
+          <div class="segmented" role="group" aria-label="Filter properties" id="filters">
+            <button type="button" data-filter="all" aria-pressed="true">All <span id="count-all"></span></button>
+            <button type="button" data-filter="mine" aria-pressed="false">My claims <span id="count-mine"></span></button>
+            <button type="button" data-filter="free" aria-pressed="false">Available <span id="count-free"></span></button>
+            <button type="button" data-filter="taken" aria-pressed="false">Taken <span id="count-taken"></span></button>
+          </div>
+          <label class="search">
+            <span class="visually-hidden">Filter by name or address</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" id="search" placeholder="Filter by name or address…" autocomplete="off" />
+          </label>
+        </div>
+
+        <p id="claim-status" class="status" role="status"></p>
+        <div class="prop-list" id="prop-list" aria-live="polite"></div>
+        <p id="prop-empty" class="empty" hidden>Nothing matches that filter.</p>
+      </div>
+
+      <div class="stack">
+        <section id="leaderboard-section" class="card">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title" id="lb-title"></h2>
+              <p>Ranked by adjusted score, then review count.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Cleaner</th><th class="num">Score</th></tr>
+              </thead>
+              <tbody id="leaderboard-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card tint">
+          <h2 class="card-title" id="rules-title"></h2>
+          <div class="rule-list">
+            <div class="rule" id="rule-min"><strong>Five reviews to be scored</strong><p>Fewer than five reviews this period and you stay unscored, at normal rank.</p></div>
+            <div class="rule" id="rule-drop"><strong>Your worst review is dropped</strong><p>The single lowest star rating is left out before averaging.</p></div>
+          </div>
+          <div class="formula">score = (sum − lowest) ÷ (n − 1)</div>
+          <dl class="kv">
+            <div><dt>Legend (top 15)</dt><dd>5 slots</dd></div>
+            <div><dt>Awesome (next 10)</dt><dd>3 slots</dd></div>
+            <div><dt>Normal</dt><dd>0 slots</dd></div>
+          </dl>
+        </section>
+      </div>
+    </div>
 
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
-      const meSummary = document.getElementById("me-summary");
-      const myPicksBody = document.getElementById("my-picks-body");
-      const picksEmpty = document.getElementById("picks-empty");
-      const unclaimedBody = document.getElementById("unclaimed-body");
-      const unclaimedEmpty = document.getElementById("unclaimed-empty");
+      const { icon, avatar, tierBadge, slotDots, escapeHtml, capFor } = StayCrew;
+      const propList = document.getElementById("prop-list");
+      const propEmpty = document.getElementById("prop-empty");
       const leaderboardBody = document.getElementById("leaderboard-body");
       const claimStatus = document.getElementById("claim-status");
+      const searchInput = document.getElementById("search");
       let myUsername = null;
+      let filter = "all";
+      let latest = null;
+
+      document.getElementById("lb-title").innerHTML = icon("trophy") + "Leaderboard";
+      document.getElementById("rules-title").innerHTML = icon("shield") + "How ranking works";
+      document.getElementById("rule-min").insertAdjacentHTML("afterbegin", icon("check"));
+      document.getElementById("rule-drop").insertAdjacentHTML("afterbegin", icon("minus"));
 
       function setStatus(el, text, kind) {
         el.textContent = text;
@@ -98,18 +123,7 @@
           location.href = "/admin.html";
           throw new Error("not a cleaner");
         }
-        const me = await res.json();
-        whoami.textContent = me.username ? `${me.username} (cleaner)` : "cleaner";
-        myUsername = me.username;
-        const scored = me.score !== null && me.score !== undefined;
-        meSummary.querySelector("#me-rank").innerHTML =
-          `<span class="pill ${escapeHtml(me.rank)}">${escapeHtml(me.rank)}</span>`;
-        meSummary.querySelector("#me-score").innerHTML = scored
-          ? `${me.score.toFixed(2)} <small>/ 5</small>`
-          : `<small>Not scored yet (needs 5 reviews)</small>`;
-        meSummary.querySelector("#me-slots").innerHTML =
-          `${me.slots_remaining} <small>of ${me.slots_remaining + me.picks.length}</small>`;
-        return me;
+        return res.json();
       }
 
       async function loadProperties() {
@@ -122,75 +136,128 @@
         return res.json();
       }
 
-      function renderMyPicks(me, properties) {
-        myPicksBody.innerHTML = "";
-        const byId = new Map(properties.map((p) => [p.id, p]));
-        const picks = [...me.picks].sort((a, b) => a.slot - b.slot);
-        picksEmpty.hidden = picks.length > 0;
-        for (const pick of picks) {
-          const property = byId.get(pick.property_id);
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${pick.slot}</td>
-            <td>${property ? escapeHtml(property.name) : "(removed property)"}</td>
-            <td>${property ? escapeHtml(property.address) : ""}</td>
-            <td class="actions"><button type="button" data-release="${pick.id}">Release</button></td>
-          `;
-          myPicksBody.appendChild(tr);
-        }
-        myPicksBody.querySelectorAll("[data-release]").forEach((btn) => {
-          btn.addEventListener("click", () => releasePick(btn.dataset.release));
-        });
+      function renderMe(me) {
+        myUsername = me.username;
+        const scored = me.score !== null && me.score !== undefined;
+        const cap = me.slots_remaining + me.picks.length;
+        const used = me.picks.length;
+        StayCrew.setUser(me.username ?? "cleaner", "cleaner", me.rank);
+        StayCrew.setMeter({ label: "My slots", used, total: cap, note: me.slots_remaining ? `${me.slots_remaining} free` : "" });
+        document.getElementById("me-avatar").innerHTML = avatar(me.username, { me: true, size: "xl" });
+        document.getElementById("me-name").textContent = me.username ?? "cleaner";
+        document.getElementById("me-rank").innerHTML = tierBadge(me.rank);
+        document.getElementById("me-score").innerHTML = scored
+          ? `Score <strong style="color:var(--green-800)">${me.score.toFixed(2)}</strong> / 5`
+          : "Not scored yet (needs 5 reviews)";
+        document.getElementById("me-slots").textContent = cap ? `${used} of ${cap} claimed` : "No slots";
+        let segs = "";
+        for (let i = 0; i < Math.max(cap, 1); i++) segs += `<i class="${i < used ? "on" : ""}"></i>`;
+        document.getElementById("me-segments").innerHTML = segs;
+        document.getElementById("me-cap-note").textContent = `${me.rank} tier · ${capFor(me.rank)} max`;
+        document.getElementById("me-free").textContent = cap
+          ? me.slots_remaining
+            ? `${me.slots_remaining} available to claim`
+            : "All slots in use"
+          : "Reviews move you up";
       }
 
-      function renderUnclaimed(properties, me) {
-        unclaimedBody.innerHTML = "";
-        const unclaimed = properties.filter((p) => !p.owner);
-        unclaimedEmpty.hidden = unclaimed.length > 0;
+      function propCard(property, me, pickByProperty) {
+        const pick = pickByProperty.get(property.id);
+        const mine = Boolean(pick);
+        const free = !property.owner;
         const canClaim = me.slots_remaining > 0;
-        for (const property of unclaimed) {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${escapeHtml(property.name)}</td>
-            <td>${escapeHtml(property.address)}</td>
-            <td class="actions"><button type="button" class="primary" data-claim="${property.id}" ${canClaim ? "" : "disabled"}>Claim</button></td>
-          `;
-          unclaimedBody.appendChild(tr);
+        const div = document.createElement("article");
+        div.className = "prop" + (mine ? " mine" : free ? " claimable" : " locked");
+
+        let tag = "";
+        let foot = "";
+        let cta = "";
+        if (mine) {
+          tag = `<span class="slot-tag">Slot ${pick.slot}</span>`;
+          foot = `${icon("check")}<span class="label">Claimed by you</span>`;
+          cta = `<button type="button" class="release" data-release="${pick.id}">${icon("minus")}Release claim</button>`;
+        } else if (free) {
+          foot = `<span class="pill ok">Available now</span>`;
+          cta = `<button type="button" class="primary" data-claim="${property.id}" ${canClaim ? "" : "disabled"}>${icon("plus")}Claim property</button>`;
+          if (!canClaim) cta += `<span class="muted">No free slot</span>`;
+        } else {
+          foot = `${icon("lock")}<span class="label">Lock</span><span>Held in the database until released</span>`;
+          cta = `<span class="prop-owner">${avatar(property.owner)}${escapeHtml(property.owner)}</span>`;
         }
-        unclaimedBody.querySelectorAll("[data-claim]").forEach((btn) => {
+
+        div.innerHTML = `
+          <div class="prop-tile">${tag}${icon(free || mine ? "home" : "lock")}</div>
+          <div class="prop-body">
+            <div class="prop-title">
+              <h3 class="prop-name">${escapeHtml(property.name)}</h3>
+              ${mine ? '<span class="pill ok">Active claim</span>' : free ? "" : '<span class="pill muted-pill">Locked</span>'}
+            </div>
+            <span class="prop-addr">${icon("pin")}${escapeHtml(property.address)}</span>
+            <div class="prop-foot">${foot}</div>
+          </div>
+          <div class="prop-cta">${cta}</div>
+        `;
+        return div;
+      }
+
+      function renderProperties() {
+        if (!latest) return;
+        const { me, properties } = latest;
+        const pickByProperty = new Map(me.picks.map((p) => [p.property_id, p]));
+        const groups = {
+          all: properties,
+          mine: properties.filter((p) => pickByProperty.has(p.id)),
+          free: properties.filter((p) => !p.owner),
+          taken: properties.filter((p) => p.owner && !pickByProperty.has(p.id)),
+        };
+        for (const key of Object.keys(groups)) {
+          document.getElementById("count-" + key).textContent = `(${groups[key].length})`;
+        }
+        // Mine first, then free, then taken — the order a cleaner acts in.
+        const order = (p) => (pickByProperty.has(p.id) ? 0 : !p.owner ? 1 : 2);
+        const q = searchInput.value.trim().toLowerCase();
+        const shown = groups[filter]
+          .filter((p) => !q || p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q))
+          .sort((a, b) => order(a) - order(b) || (pickByProperty.get(a.id)?.slot ?? 0) - (pickByProperty.get(b.id)?.slot ?? 0));
+
+        propList.replaceChildren(...shown.map((p) => propCard(p, me, pickByProperty)));
+        propEmpty.hidden = shown.length > 0;
+        propEmpty.textContent =
+          properties.length === 0 ? "No properties yet. The admin adds them." : "Nothing matches that filter.";
+
+        propList.querySelectorAll("[data-claim]").forEach((btn) => {
           btn.addEventListener("click", () => claimProperty(btn.dataset.claim));
         });
-        if (!canClaim && unclaimed.length > 0) {
+        propList.querySelectorAll("[data-release]").forEach((btn) => {
+          btn.addEventListener("click", () => releasePick(btn.dataset.release));
+        });
+
+        if (me.slots_remaining <= 0 && groups.free.length > 0 && !claimStatus.classList.contains("error")) {
           setStatus(claimStatus, "No free slots — release a pick or wait for a rank change to claim more.", "");
         }
       }
 
       function renderLeaderboard(entries) {
         leaderboardBody.innerHTML = "";
-        for (const entry of entries) {
+        entries.forEach((entry, i) => {
           const tr = document.createElement("tr");
-          const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          const scored = entry.score !== null && entry.score !== undefined;
           const isMe = myUsername !== null && entry.username === myUsername;
           if (isMe) tr.className = "is-me";
           tr.innerHTML = `
-            <td>${escapeHtml(entry.username)}${isMe ? '<span class="you">You</span>' : ""}</td>
-            <td><span class="pill ${escapeHtml(entry.rank)}">${escapeHtml(entry.rank)}</span></td>
-            <td class="num">${scoreText}</td>
+            <td class="rank-num">${i + 1}</td>
+            <td><div class="who-cell">${avatar(entry.username, { me: isMe })}<div><strong>${escapeHtml(entry.username)}</strong>${isMe ? '<span class="you">You</span>' : ""}<small>${tierBadge(entry.rank)}</small></div></div></td>
+            <td class="num"><span class="score${scored ? "" : " none"}">${scored ? entry.score.toFixed(2) : "—"}</span></td>
           `;
           leaderboardBody.appendChild(tr);
-        }
-      }
-
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
+        });
       }
 
       async function refreshAll() {
         const [me, properties, leaderboard] = await Promise.all([loadMe(), loadProperties(), loadLeaderboard()]);
-        renderMyPicks(me, properties);
-        renderUnclaimed(properties, me);
+        latest = { me, properties };
+        renderMe(me);
+        renderProperties();
         renderLeaderboard(leaderboard);
       }
 
@@ -231,17 +298,22 @@
         }
       }
 
+      document.getElementById("filters").addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-filter]");
+        if (!btn) return;
+        filter = btn.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+        renderProperties();
+      });
+      searchInput.addEventListener("input", renderProperties);
+
       document.getElementById("logout").addEventListener("click", async () => {
         await fetch("/logout", { method: "POST" });
         location.href = "/";
       });
 
-      // Live updates (public/realtime.js): a claim/release anywhere re-runs
-      // the same refreshAll() the page loads with, so /api/me +
-      // /api/properties are re-fetched and myPicks/unclaimed/leaderboard all
-      // re-render from fresh data. ranks:changed only affects the
-      // leaderboard + my rank, but refreshAll() is cheap and keeps this in
-      // sync with the one source of truth instead of a second code path.
+      // Live updates (public/realtime.js): any claim, release or rank change
+      // re-runs the same refreshAll() the page loads with.
       onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
       onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
       onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));

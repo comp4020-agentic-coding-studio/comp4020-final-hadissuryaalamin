@@ -7,71 +7,86 @@
     <link rel="stylesheet" href="/style.css" />
     <style>
       /* Chat-specific layout only — everything else reuses style.css tokens. */
-      body.chat-body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: 1rem; }
-      body.chat-body nav.tabs { margin-bottom: 1rem; }
-      body.chat-body > footer { display: none; }
+      .chat-layout { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1.5rem; align-items: start; }
       .chat-panel {
-        flex: 1; min-height: 0; display: flex; flex-direction: column;
+        display: flex; flex-direction: column; min-height: 0; height: calc(100vh - 9.5rem); height: calc(100dvh - 9.5rem);
         background: var(--surface); border: 1px solid var(--border);
-        border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+        border-radius: var(--radius-lg); box-shadow: var(--shadow-1); overflow: hidden;
       }
-      #chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 1.5rem 1.25rem; }
-      .chat-column { max-width: 44rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; min-height: 100%; }
-      .msg { display: flex; gap: 0.75rem; align-items: flex-start; max-width: 100%; }
+      .chat-head { display: flex; align-items: center; gap: 0.85rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+      .bot { display: grid; place-items: center; flex-shrink: 0; }
+      .chat-head .bot { width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; background: var(--green-800); color: #fff; }
+      .chat-head .bot .icon { width: 1.5rem; height: 1.5rem; }
+      .chat-head h1 { font-size: 1.35rem; letter-spacing: -0.02em; }
+      .chat-head small { display: flex; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.8rem; }
+      .chat-head small .dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--green-500); flex-shrink: 0; }
+      #chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 1.5rem 1.25rem; background: #fbfcff; }
+      .chat-column { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.1rem; min-height: 100%; }
+      .msg { display: flex; gap: 0.7rem; align-items: flex-end; max-width: 100%; }
       .msg.user { justify-content: flex-end; }
       .msg.user .text {
-        background: var(--accent); color: var(--accent-contrast);
-        padding: 0.6rem 1rem; border-radius: 1.25rem 1.25rem 0.35rem 1.25rem; max-width: 80%;
+        background: var(--surface-tint); color: var(--text); border: 1px solid #dce9ff;
+        padding: 0.7rem 1rem; border-radius: 1rem 1rem 0.3rem 1rem; max-width: 80%;
       }
-      .msg.assistant .avatar {
-        flex-shrink: 0; width: 1.9rem; height: 1.9rem; border-radius: 0.55rem;
-        display: grid; place-items: center; background: var(--accent-soft); color: var(--accent);
-        font-size: 0.7rem; font-weight: 700;
+      .msg .avatar { width: 2rem; height: 2rem; border-radius: 50%; font-size: 0.7rem; }
+      .msg.assistant { align-items: flex-start; }
+      .msg.assistant .avatar { border-radius: 0.6rem; background: var(--green-800); color: #fff; }
+      .msg.assistant .avatar .icon { width: 1.1rem; height: 1.1rem; }
+      .msg.assistant .text {
+        background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-1);
+        padding: 0.75rem 1rem; border-radius: 0.3rem 1rem 1rem 1rem; max-width: 40rem; min-width: 0;
       }
-      .msg.assistant .text { padding-top: 0.2rem; max-width: 40rem; min-width: 0; }
-      .msg.assistant.error .text {
-        color: var(--danger); background: var(--danger-soft); padding: 0.55rem 0.9rem; border-radius: 0.75rem;
-      }
+      .msg.assistant.error .text { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-border); }
       .msg.pending .text { color: var(--text-muted); font-style: italic; }
-      .text { font-size: 0.97rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .text { font-size: 0.95rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-body); }
 
-      .chat-empty { margin: auto 0; text-align: center; padding: 2rem 0; }
-      .chat-empty h2 { font-family: var(--font-heading); font-style: italic; font-weight: 500; font-size: 1.6rem; margin: 0 0 0.4rem; }
-      .chat-empty p { margin: 0 0 1.25rem; }
-      .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
-      .suggestions button { font-size: 0.88rem; font-weight: 500; padding: 0.45rem 0.95rem; }
+      .chat-empty { margin: auto 0; text-align: center; padding: 2rem 0; display: grid; justify-items: center; gap: 0.5rem; }
+      .chat-empty .bot { width: 3.5rem; height: 3.5rem; border-radius: 1rem; background: var(--green-50); color: var(--green-800); }
+      .chat-empty .bot .icon { width: 1.8rem; height: 1.8rem; }
+      .chat-empty h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; margin: 0.25rem 0 0; }
+      .chat-empty p { margin: 0; }
 
       .composer { border-top: 1px solid var(--border); padding: 0.85rem 1.25rem 1rem; background: var(--surface); }
-      .composer form { max-width: 44rem; margin: 0 auto; display: grid; gap: 0.5rem; }
+      .composer form { max-width: 46rem; margin: 0 auto; display: grid; gap: 0.6rem; }
+      .suggestions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+      .suggestions button { min-height: 2.2rem; font-size: 0.84rem; font-weight: 600; padding: 0.35rem 0.85rem; border-radius: 999px; }
+      .suggestions button .icon { width: 0.95rem; height: 0.95rem; color: var(--green-800); }
       .composer .status { margin: 0; }
       .attach-chip {
         display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; max-width: 100%;
         font-size: 0.82rem; padding: 0.2rem 0.3rem 0.2rem 0.7rem; border-radius: 999px;
-        background: var(--accent-soft); color: var(--accent); font-weight: 550;
+        background: var(--green-50); color: var(--green-800); font-weight: 600;
       }
-      .attach-chip[hidden] { display: none; }
       .attach-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .attach-chip button { border: 0; background: transparent; padding: 0.15rem 0.35rem; color: inherit; line-height: 1; }
+      .attach-chip button { border: 0; background: transparent; padding: 0.15rem 0.35rem; min-height: 0; color: inherit; line-height: 1; }
       .input-row {
         display: flex; gap: 0.4rem; align-items: flex-end;
-        border: 1px solid var(--border-strong); border-radius: 1.4rem; background: var(--bg);
+        border: 1px solid var(--border-strong); border-radius: 0.85rem; background: var(--surface-tint);
         padding: 0.35rem 0.35rem 0.35rem 0.9rem;
       }
-      .input-row.has-attach { padding-left: 0.4rem; }
-      .input-row:focus-within { border-color: var(--accent); }
+      .input-row.has-attach { padding-left: 0.35rem; }
+      .input-row:focus-within { border-color: var(--green-500); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
       .input-row textarea {
         flex: 1; resize: none; border: 0; background: transparent; color: var(--text);
-        padding: 0.45rem 0.3rem; font: inherit; line-height: 1.4; max-height: 8rem;
+        padding: 0.55rem 0.3rem; font: inherit; line-height: 1.4; max-height: 8rem;
       }
       .input-row textarea:focus { outline: none; }
-      .input-row .icon-btn { border: 0; background: transparent; color: var(--text-muted); padding: 0.5rem; }
-      .input-row .icon-btn[hidden] { display: none; }
-      .input-row .icon-btn:hover { background: var(--surface-sunk); color: var(--text); }
-      .input-row .icon-btn svg { width: 1.15rem; height: 1.15rem; }
+      .input-row .icon-btn { border: 0; background: #fff; color: var(--slate-700); padding: 0.5rem; }
+      .input-row .icon-btn:hover { background: var(--border); color: var(--text); }
       .input-row button.primary { padding: 0.5rem 1.1rem; }
-      .composer .hint { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin: 0; }
+      .composer .hint { font-size: 0.74rem; color: var(--text-muted); text-align: center; margin: 0; }
 
-      @media (max-width: 30rem) {
+      .side-stack { display: grid; gap: 1.25rem; }
+      .side-stack .card { padding: 1.15rem; gap: 0.8rem; }
+      .side-stack h2 { font-size: 1rem; }
+      .side-stack p { margin: 0; }
+
+      @media (max-width: 72rem) {
+        .chat-layout { grid-template-columns: minmax(0, 1fr); }
+        .side-stack { display: none; }
+      }
+      @media (max-width: 56rem) {
+        .chat-panel { height: calc(100dvh - 11.5rem); }
         #chat-log { padding: 1rem 0.85rem; }
         .composer { padding: 0.65rem 0.65rem 0.75rem; }
         .composer .hint { display: none; }
@@ -79,33 +94,29 @@
       }
     </style>
   </head>
-  <body class="chat-body">
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Assistant</h1>
-      </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
-      </div>
-    </header>
-
-    <nav class="tabs" id="nav-links"></nav>
-
+  <body data-page="home" data-role="auto">
+    <div class="chat-layout">
     <main class="chat-panel">
+      <div class="chat-head">
+        <span class="bot" id="head-bot"></span>
+        <div>
+          <h1>Crew Assistant</h1>
+          <small><span class="dot"></span>Same rules as the pages · asks before it changes anything</small>
+        </div>
+      </div>
       <div id="chat-log" aria-live="polite">
         <div class="chat-column" id="chat-column">
           <div class="chat-empty" id="chat-empty">
+            <span class="bot" id="empty-bot"></span>
             <h2>What do you want to check?</h2>
             <p class="muted">Answers come from the current leaderboard, reviews and property list.</p>
-            <div class="suggestions" id="chat-suggestions"></div>
           </div>
         </div>
       </div>
 
       <div class="composer">
         <form id="chat-form">
+          <div class="suggestions" id="chat-suggestions"></div>
           <span class="attach-chip" id="chat-file-chip" hidden>
             <span id="chat-file-name"></span>
             <button type="button" id="chat-file-remove" aria-label="Remove attached file">&times;</button>
@@ -114,13 +125,13 @@
           <p id="chat-file-error" class="status" role="status"></p>
           <div class="input-row" id="chat-input-row">
             <button type="button" class="icon-btn" id="chat-attach" aria-label="Attach a CSV file" hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
             </button>
             <label class="visually-hidden" for="chat-input">Message</label>
             <textarea
               id="chat-input"
               rows="1"
-              placeholder="Ask a question…"
+              placeholder="Ask the assistant…"
               autocomplete="off"
               required
             ></textarea>
@@ -131,11 +142,29 @@
       </div>
     </main>
 
+    <aside class="side-stack">
+      <section class="card">
+        <span class="eyebrow">Signed in</span>
+        <div class="who-cell"><span id="side-avatar"></span><div><strong id="side-name">…</strong><small id="side-role"></small></div></div>
+        <div id="side-extra"></div>
+      </section>
+      <section class="card tint">
+        <h2 class="card-title" id="safe-title"></h2>
+        <p class="muted">The assistant calls the same server functions as the pages, under your own account. Anything that changes data is proposed first and only written after you reply "yes".</p>
+      </section>
+      <section class="card tint">
+        <h2 class="card-title" id="slack-title"></h2>
+        <p class="muted">Linked cleaners can ask for a property in plain words in the team Slack channel. The admin links accounts on the Cleaners page.</p>
+      </section>
+    </aside>
+    </div>
+
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
-      const navLinks = document.getElementById("nav-links");
+      const { icon, avatar, tierBadge, escapeHtml } = StayCrew;
       const chatLog = document.getElementById("chat-log");
       const chatColumn = document.getElementById("chat-column");
       const chatEmpty = document.getElementById("chat-empty");
@@ -156,17 +185,30 @@
       const history = [];
       const MAX_HISTORY_TURNS = 20;
 
+      document.getElementById("head-bot").innerHTML = icon("bot");
+      document.getElementById("empty-bot").innerHTML = icon("bot");
+      document.getElementById("safe-title").innerHTML = icon("shield") + "Asks before it writes";
+      document.getElementById("slack-title").innerHTML = icon("chat") + "Also in Slack";
+
       const SUGGESTIONS = {
-        admin: ["Who is top of the leaderboard?", "Which properties are unclaimed?", "How did this month's reviews go?"],
-        cleaner: ["What's my rank and score?", "Which properties are still free?", "Who is top of the leaderboard?"],
+        admin: [
+          ["trophy", "Who is top of the leaderboard?"],
+          ["building", "Which properties are unclaimed?"],
+          ["star", "How did this month's reviews go?"],
+        ],
+        cleaner: [
+          ["star", "What's my rank and score?"],
+          ["building", "Which properties are still free?"],
+          ["trophy", "Who is top of the leaderboard?"],
+        ],
       };
 
       function renderSuggestions(role) {
         chatSuggestions.replaceChildren(
-          ...SUGGESTIONS[role].map((text) => {
+          ...SUGGESTIONS[role].map(([ic, text]) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.textContent = text;
+            button.innerHTML = icon(ic) + escapeHtml(text);
             button.addEventListener("click", () => {
               chatInput.value = text;
               chatInput.focus();
@@ -192,45 +234,41 @@
         chatFileError.className = "status" + (text ? " error" : "");
       }
 
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
-      }
+      let myName = "you";
 
       function addMessage(text, kind) {
         chatEmpty.remove();
         const row = document.createElement("div");
         row.className = "msg " + kind;
-        if (!kind.startsWith("user")) {
-          const avatar = document.createElement("div");
-          avatar.className = "avatar";
-          avatar.setAttribute("aria-hidden", "true");
-          avatar.textContent = "CP";
-          row.appendChild(avatar);
-        }
         const body = document.createElement("div");
         body.className = "text";
         body.textContent = text;
-        row.appendChild(body);
+        if (kind.startsWith("user")) {
+          row.append(body);
+          row.insertAdjacentHTML("beforeend", avatar(myName, { me: true }));
+        } else {
+          row.insertAdjacentHTML("afterbegin", `<span class="avatar" aria-hidden="true">${icon("bot")}</span>`);
+          row.append(body);
+        }
         chatColumn.appendChild(row);
         chatLog.scrollTop = chatLog.scrollHeight;
         return row;
       }
 
-      function renderNav(role) {
-        const pages =
-          role === "admin"
-            ? [
-                ["/admin.html", "Dashboard"],
-                ["/cleaners.html", "Cleaners"],
-                ["/properties.html", "Properties"],
-                ["/reviews.html", "Reviews"],
-              ]
-            : [["/cleaner.html", "My dashboard"]];
-        navLinks.innerHTML = pages
-          .map(([href, label]) => `<a href="${href}">${escapeHtml(label)}</a>`)
-          .join("");
+      function renderSide(name, role, me) {
+        document.getElementById("side-avatar").innerHTML = avatar(name, { me: true });
+        document.getElementById("side-name").textContent = name;
+        document.getElementById("side-role").textContent = role === "admin" ? "Admin" : "Cleaner";
+        if (me) {
+          const cap = me.slots_remaining + me.picks.length;
+          document.getElementById("side-extra").innerHTML =
+            `<dl class="kv"><div><dt>Tier</dt><dd>${tierBadge(me.rank)}</dd></div>` +
+            `<div><dt>Score</dt><dd>${me.score === null || me.score === undefined ? "Not scored" : me.score.toFixed(2)}</dd></div>` +
+            `<div><dt>Slots</dt><dd>${me.picks.length} of ${cap}</dd></div></dl>`;
+        } else {
+          document.getElementById("side-extra").innerHTML =
+            '<p class="muted">As admin you can also attach a reviews CSV with the paperclip.</p>';
+        }
       }
 
       // Same role-detection pattern as every other page: GET /api/me is 200
@@ -243,13 +281,18 @@
           throw new Error("not signed in");
         }
         if (res.status === 200) {
-          whoami.textContent = "cleaner";
-          renderNav("cleaner");
+          const me = await res.json();
+          myName = me.username ?? "cleaner";
+          StayCrew.setRole("cleaner");
+          StayCrew.setUser(myName, "cleaner", me.rank);
+          renderSide(myName, "cleaner", me);
           renderSuggestions("cleaner");
           return;
         }
-        whoami.textContent = "admin";
-        renderNav("admin");
+        myName = "admin";
+        StayCrew.setRole("admin");
+        StayCrew.setUser("admin", "admin");
+        renderSide("admin", "admin", null);
         renderSuggestions("admin");
         chatAttach.hidden = false;
         chatInputRow.classList.add("has-attach");

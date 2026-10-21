@@ -12,6 +12,8 @@
 
 (function () {
   const handlers = new Map(); // type -> Set<handler>
+  const statusHandlers = new Set();
+  let connected = false;
   const RECONNECT_MIN_MS = 500;
   const RECONNECT_MAX_MS = 10000;
   let reconnectDelay = RECONNECT_MIN_MS;
@@ -35,6 +37,7 @@
 
     socket.addEventListener("open", () => {
       reconnectDelay = RECONNECT_MIN_MS;
+      setConnected(true);
     });
 
     socket.addEventListener("message", (event) => {
@@ -50,6 +53,7 @@
 
     socket.addEventListener("close", () => {
       socket = null;
+      setConnected(false);
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
     });
@@ -60,6 +64,17 @@
       // unhandled-error console spam from the default action.
     });
   }
+
+  function setConnected(next) {
+    connected = next;
+    for (const handler of statusHandlers) handler(connected);
+  }
+
+  /** Calls `handler(connected)` now and whenever the socket opens or drops. */
+  window.onRealtimeStatus = function onRealtimeStatus(handler) {
+    statusHandlers.add(handler);
+    handler(connected);
+  };
 
   /** Subscribes `handler(payload)` to every message of `type`. */
   window.onRealtime = function onRealtime(type, handler) {

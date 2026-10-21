@@ -3,82 +3,123 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Reviews</title>
+    <title>Reviews · StayCrew</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Reviews</h1>
+  <body data-page="reviews" data-role="admin">
+    <section class="hero">
+      <div class="hero-main">
+        <span class="hero-icon" id="hero-icon"></span>
+        <div class="hero-text">
+          <div class="hero-meta"><span class="eyebrow">Review batch</span><span class="chip green" id="period-chip">Period —</span></div>
+          <h1>Monthly reviews</h1>
+          <p class="hero-sub">Submitting a batch recomputes every cleaner's score and rank, and trims claims above a new cap.</p>
+        </div>
       </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
-      </div>
-    </header>
+    </section>
 
-    <nav class="tabs">
-      <a href="/admin.html">Dashboard</a>
-      <a href="/cleaners.html">Cleaners</a>
-      <a href="/properties.html">Properties</a>
-      <a href="/reviews.html" aria-current="true">Reviews</a>
-    </nav>
-
-    <div class="summary-cards" id="summary-cards">
-      <div class="card">
-        <span class="value" id="summary-period">—</span>
-        <span class="label">current period</span>
+    <div class="stat-row" id="summary-cards">
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Current period</span><span class="stat-icon" id="si-1"></span></div>
+        <span class="stat-value" id="summary-period" style="font-size:2rem">—</span>
+        <p>Only reviews in this period count</p>
       </div>
-      <div class="card">
-        <span class="value" id="summary-total">—</span>
-        <span class="label">reviews this month</span>
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Reviews this month</span><span class="stat-icon" id="si-2"></span></div>
+        <span class="stat-value" id="summary-total">—</span>
+        <p>Star ratings submitted so far</p>
       </div>
-      <div class="card">
-        <span class="value" id="summary-cleaners">—</span>
-        <span class="label">cleaners reviewed</span>
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Cleaners reviewed</span><span class="stat-icon" id="si-3"></span></div>
+        <span class="stat-value" id="summary-cleaners">—</span>
+        <p>Five each are needed to be scored</p>
       </div>
-      <div class="card">
-        <span class="value" id="summary-avg">—</span>
-        <span class="label">average stars (raw)</span>
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Average stars (raw)</span><span class="stat-icon" id="si-4"></span></div>
+        <span class="stat-value gold" id="summary-avg">—</span>
+        <p>Before each cleaner's lowest is dropped</p>
       </div>
     </div>
 
-    <section id="reviews-section" class="card">
-      <h2>Add this month's reviews</h2>
-      <p class="muted">
-        Add one row per review (a cleaner can appear more than once). A
-        cleaner needs at least 5 reviews in the current period to be scored,
-        and the single worst review is dropped from their average.
-      </p>
-      <div id="review-rows"></div>
-      <div class="inline-form">
-        <button type="button" id="add-review-row">Add review row</button>
-        <button type="button" id="submit-reviews" class="primary">Submit batch</button>
-      </div>
-      <p id="reviews-status" class="status" role="status"></p>
+    <div class="grid-2">
+      <section id="reviews-section" class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title" id="batch-title"></h2>
+            <p>One row per review. A cleaner can appear more than once.</p>
+          </div>
+        </div>
+        <div id="review-rows"></div>
+        <div class="inline-form">
+          <button type="button" id="add-review-row" class="ghost">Add review row</button>
+          <button type="button" id="submit-reviews" class="primary">Submit batch</button>
+        </div>
+        <p id="reviews-status" class="status" role="status"></p>
 
-      <h3>Or upload a CSV</h3>
-      <p class="muted">
-        Two columns, <code>username,stars</code>, one row per review (a
-        header row is fine and gets skipped automatically). Usernames are
-        matched against existing cleaner accounts.
-      </p>
-      <div class="inline-form">
-        <input type="file" id="csv-input" accept=".csv,text/csv" />
-        <button type="button" id="submit-csv" class="primary">Upload CSV</button>
-      </div>
-      <p id="csv-status" class="status" role="status"></p>
-    </section>
+        <hr class="quick-divider" />
+
+        <h2 class="card-title" id="csv-title"></h2>
+        <label class="dropzone" id="dropzone">
+          <span class="drop-icon" id="drop-icon"></span>
+          <strong>Drop a reviews CSV here</strong>
+          <span class="muted">or click to choose a file</span>
+          <span class="cols"><code>username</code><code>stars</code></span>
+          <input type="file" id="csv-input" accept=".csv,text/csv" class="visually-hidden" />
+        </label>
+        <div class="file-line" id="file-line" hidden>
+          <span id="file-icon"></span>
+          <span><strong id="file-name"></strong> <span class="muted" id="file-size"></span></span>
+          <span class="pill ok">Ready</span>
+        </div>
+        <p class="muted">
+          Two columns, <code>username,stars</code>, one row per review. A header row is skipped
+          automatically. Usernames are matched against existing cleaner accounts.
+        </p>
+        <button type="button" id="submit-csv" class="primary block">Upload CSV and recalculate</button>
+        <p id="csv-status" class="status" role="status"></p>
+      </section>
+
+      <section class="card tint">
+        <h2 class="card-title" id="rules-title"></h2>
+        <div class="rule-list">
+          <div class="rule" id="rule-min"><strong>Five reviews to be scored</strong><p>A cleaner with fewer than five reviews this period stays unscored and normal.</p></div>
+          <div class="rule" id="rule-drop"><strong>Lowest review dropped</strong><p>Each cleaner's single worst rating is left out before averaging.</p></div>
+          <div class="rule" id="rule-demote"><strong>Demotion trims the newest claims</strong><p>Moving down a tier keeps the earliest claims up to the new cap. Legend to awesome keeps slots 1–3.</p></div>
+        </div>
+        <div class="formula">score = (sum − lowest) ÷ (n − 1)<br />sort: score, then review count, then oldest account</div>
+        <dl class="kv">
+          <div><dt>Top 15 scored</dt><dd>Legend · 5 slots</dd></div>
+          <div><dt>Next 10</dt><dd>Awesome · 3 slots</dd></div>
+          <div><dt>Everyone else</dt><dd>Normal · 0 slots</dd></div>
+        </dl>
+      </section>
+    </div>
 
     <footer><a href="/readme/">About this app</a></footer>
 
+    <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
+      const { icon, escapeHtml } = StayCrew;
       const reviewRows = document.getElementById("review-rows");
       const reviewsStatus = document.getElementById("reviews-status");
       const csvInput = document.getElementById("csv-input");
       const csvStatus = document.getElementById("csv-status");
+      const dropzone = document.getElementById("dropzone");
+
+      document.getElementById("hero-icon").innerHTML = icon("star");
+      document.getElementById("si-1").innerHTML = icon("chart");
+      document.getElementById("si-2").innerHTML = icon("star");
+      document.getElementById("si-3").innerHTML = icon("users");
+      document.getElementById("si-4").innerHTML = icon("trophy");
+      document.getElementById("batch-title").innerHTML = icon("plus") + "Add this month's reviews";
+      document.getElementById("csv-title").innerHTML = icon("upload") + "Or upload a CSV";
+      document.getElementById("drop-icon").innerHTML = icon("upload");
+      document.getElementById("file-icon").innerHTML = icon("file");
+      document.getElementById("rules-title").innerHTML = icon("shield") + "How a batch is scored";
+      document.getElementById("rule-min").insertAdjacentHTML("afterbegin", icon("check"));
+      document.getElementById("rule-drop").insertAdjacentHTML("afterbegin", icon("minus"));
+      document.getElementById("rule-demote").insertAdjacentHTML("afterbegin", icon("lock"));
 
       let cleaners = []; // [{cleaner_id, username, rank, score}]
       let reviewRowCount = 0;
@@ -86,12 +127,6 @@
       function setStatus(el, text, kind) {
         el.textContent = text;
         el.className = "status" + (kind ? " " + kind : "");
-      }
-
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
       }
 
       async function api(path, options) {
@@ -117,7 +152,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        StayCrew.setUser("admin", "admin");
       }
 
       async function loadCleaners() {
@@ -129,10 +164,13 @@
         const res = await api("/api/reviews/summary");
         const summary = await res.json();
         document.getElementById("summary-period").textContent = summary.period ?? "none yet";
+        document.getElementById("period-chip").textContent = summary.period ? `Period ${summary.period}` : "No period yet";
         document.getElementById("summary-total").textContent = summary.total_reviews;
-        document.getElementById("summary-cleaners").textContent = summary.cleaners_reviewed;
-        document.getElementById("summary-avg").textContent =
-          summary.average_stars === null ? "—" : summary.average_stars.toFixed(2);
+        document.getElementById("summary-cleaners").innerHTML =
+          `${summary.cleaners_reviewed}<small class="muted-unit">of ${cleaners.length}</small>`;
+        document.getElementById("summary-avg").innerHTML =
+          summary.average_stars === null ? "—" : `${summary.average_stars.toFixed(2)}<small class="muted-unit">/ 5</small>`;
+        StayCrew.setMeter({ label: "Cleaners reviewed", used: summary.cleaners_reviewed, total: cleaners.length });
       }
 
       function addReviewRow() {
@@ -144,15 +182,15 @@
           .map((c) => `<option value="${c.cleaner_id}">${escapeHtml(c.username)}</option>`)
           .join("");
         row.innerHTML = `
-          <select data-cleaner>${options}</select>
-          <select data-stars>
+          <select data-cleaner aria-label="Cleaner">${options}</select>
+          <select data-stars aria-label="Stars">
             <option value="1">1 star</option>
             <option value="2">2 stars</option>
             <option value="3">3 stars</option>
             <option value="4">4 stars</option>
             <option value="5" selected>5 stars</option>
           </select>
-          <button type="button" data-remove>Remove</button>
+          <button type="button" class="ghost" data-remove>Remove</button>
         `;
         row.querySelector("[data-remove]").addEventListener("click", () => row.remove());
         reviewRows.appendChild(row);
@@ -221,6 +259,29 @@
         return { items, unknown: [...unknown] };
       }
 
+      function showFile() {
+        const file = csvInput.files?.[0];
+        document.getElementById("file-line").hidden = !file;
+        if (!file) return;
+        document.getElementById("file-name").textContent = file.name;
+        document.getElementById("file-size").textContent = `· ${(file.size / 1024).toFixed(1)} KB`;
+      }
+
+      csvInput.addEventListener("change", showFile);
+      dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropzone.classList.add("over");
+      });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("over"));
+      dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("over");
+        if (event.dataTransfer?.files?.length) {
+          csvInput.files = event.dataTransfer.files;
+          showFile();
+        }
+      });
+
       document.getElementById("submit-csv").addEventListener("click", async () => {
         const file = csvInput.files?.[0];
         if (!file) {
@@ -241,7 +302,10 @@
             "error",
           );
         }
-        if (ok) csvInput.value = "";
+        if (ok) {
+          csvInput.value = "";
+          showFile();
+        }
       });
 
       document.getElementById("logout").addEventListener("click", async () => {

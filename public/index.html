@@ -3,25 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cleaner Performance &amp; Property Preference</title>
+    <title>StayCrew · Cleaner Performance &amp; Property Preference</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body class="narrow">
-    <form id="login-form" class="card signin">
-      <h1>Cleaner Performance &amp; Property Preference</h1>
-      <p>Sign in with the account your admin gave you.</p>
-      <label>
-        Username
-        <input type="text" name="username" autocomplete="username" required />
-      </label>
-      <label>
-        Password
-        <input type="password" name="password" autocomplete="current-password" required />
-      </label>
-      <button type="submit" class="primary">Sign in</button>
-      <p class="status" id="login-status" role="status"></p>
-    </form>
-    <footer><a href="/readme/">About this app</a></footer>
+  <body class="signin-body">
+    <div class="signin-wrap">
+      <div class="signin-brand">
+        <svg class="logo-mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--green-900)"/><path d="M9 20.5 20 11l11 9.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M26.5 13.2V10h2.6v5.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/><path d="M20 17.5l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z" fill="var(--gold-400)"/></svg>
+        <strong>Stay<span>Crew</span></strong>
+      </div>
+      <form id="login-form" class="card signin">
+        <h1>Cleaner Performance &amp; Property Preference</h1>
+        <p>Sign in with the account your admin gave you.</p>
+        <label>
+          Username
+          <input type="text" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="primary">Sign in</button>
+        <p class="status" id="login-status" role="status"></p>
+      </form>
+      <p class="signin-foot"><a href="/readme/">About this app</a></p>
+    </div>
     <script>
       const form = document.getElementById("login-form");
       const status = document.getElementById("login-status");

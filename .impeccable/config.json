@@ -29,6 +29,12 @@
         ],
         "createdAt": "2026-10-15T20:51:32.527Z",
         "reason": "palette copied from stayor.framer.website (#faf7f2/#fffdfa in its source); user viewed the reskin live and said 'looks good'"
+      },
+      {
+        "rule": "overused-font",
+        "value": "plus jakarta sans",
+        "createdAt": "2026-10-21T20:56:06.005Z",
+        "reason": "Plus Jakarta Sans is the typeface specified in the user-supplied Stitch DESIGN.md (warm_utilitarian_hospitality) the user asked to apply"
       }
     ]
   }

@@ -3,106 +3,185 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin dashboard</title>
+    <title>Dashboard · StayCrew</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Admin dashboard</h1>
+  <body data-page="admin" data-role="admin">
+    <section class="hero">
+      <div class="hero-main">
+        <span class="hero-icon" id="hero-icon"></span>
+        <div class="hero-text">
+          <span class="eyebrow">Operations</span>
+          <h1>Admin dashboard</h1>
+          <p id="summary" class="hero-sub"></p>
+        </div>
       </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
+      <dl class="hero-stats">
+        <div><dt>Cleaners</dt><dd id="hs-cleaners">—</dd></div>
+        <div><dt>Legend</dt><dd id="hs-legend">—</dd></div>
+        <div><dt>Unclaimed</dt><dd id="hs-free">—</dd></div>
+      </dl>
+    </section>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Properties claimed</span><span class="stat-icon" id="si-1"></span></div>
+        <span class="stat-value" id="st-claimed">—</span>
+        <p id="st-claimed-note">of all properties</p>
+        <div class="stat-bar"><i id="st-claimed-bar" style="width:0%"></i></div>
       </div>
-    </header>
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Scored cleaners</span><span class="stat-icon" id="si-2"></span></div>
+        <span class="stat-value" id="st-scored">—</span>
+        <p>Five or more reviews this period</p>
+        <div class="stat-bar slate"><i id="st-scored-bar" style="width:0%"></i></div>
+      </div>
+      <div class="stat">
+        <div class="stat-head"><span class="eyebrow">Slots in use</span><span class="stat-icon" id="si-3"></span></div>
+        <span class="stat-value" id="st-slots">—</span>
+        <p>Claims held across every tier cap</p>
+        <div class="stat-bar gold"><i id="st-slots-bar" style="width:0%"></i></div>
+      </div>
+    </div>
 
-    <nav class="tabs">
-      <a href="/admin.html" aria-current="true">Dashboard</a>
-      <a href="/cleaners.html">Cleaners</a>
-      <a href="/properties.html">Properties</a>
-      <a href="/reviews.html">Reviews</a>
-    </nav>
-
-    <p id="summary" class="muted"></p>
-
-    <div class="dashboard-grid">
-      <section id="cleaners-card" class="card">
-        <h2>Cleaners</h2>
-        <div class="card-scroll">
+    <div class="grid-2">
+      <section id="cleaners-card" class="card flush">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title" id="standings-title"></h2>
+            <p>Ranked by adjusted score, then review count.</p>
+          </div>
+          <a href="/cleaners.html" class="chip">Manage cleaners</a>
+        </div>
+        <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Cleaner</th><th>Rank</th><th class="num">Score</th><th>Preferred properties</th></tr>
+              <tr><th>#</th><th>Cleaner</th><th>Tier</th><th class="num">Score</th><th>Slots</th></tr>
             </thead>
             <tbody id="leaderboard-body"></tbody>
           </table>
         </div>
+        <p id="cleaners-empty" class="empty" style="margin: 0 1.5rem 1.5rem" hidden>No cleaners yet. Add one on the right.</p>
       </section>
 
-      <section id="actions-card" class="card">
-        <h2>Quick actions</h2>
+      <div class="stack">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Tier pool</h2>
+              <p>How cleaners split across rank tiers.</p>
+            </div>
+          </div>
+          <div class="pool">
+            <div class="pool-bar" id="pool-bar"></div>
+            <dl class="pool-key">
+              <div><dt><i style="background:var(--gold-400)"></i>Legend (5 slots)</dt><dd id="pool-legend" style="color:#c27803">0</dd></div>
+              <div><dt><i style="background:#6366f1"></i>Awesome (3 slots)</dt><dd id="pool-awesome" style="color:#4338ca">0</dd></div>
+              <div><dt><i style="background:var(--slate-400)"></i>Normal (no slots)</dt><dd id="pool-normal">0</dd></div>
+            </dl>
+          </div>
+        </section>
 
-        <h3>Add property</h3>
-        <form id="add-property-form" class="inline-form">
-          <label>Name <input type="text" name="name" required /></label>
-          <label>Address <input type="text" name="address" required /></label>
-          <button type="submit" class="primary">Add property</button>
-        </form>
-        <p id="property-status" class="status" role="status"></p>
+        <section id="actions-card" class="card">
+          <h2 class="card-title" id="actions-title"></h2>
+          <h3 style="margin-top:0">Add property</h3>
+          <form id="add-property-form" class="inline-form">
+            <label>Name <input type="text" name="name" required /></label>
+            <label>Address <input type="text" name="address" required /></label>
+            <button type="submit" class="primary">Add property</button>
+          </form>
+          <p id="property-status" class="status" role="status"></p>
 
-        <hr class="quick-divider" />
-        <h3>Add cleaner</h3>
-        <form id="add-cleaner-form" class="inline-form">
-          <label>Username <input type="text" name="username" required /></label>
-          <label>Password <input type="password" name="password" required /></label>
-          <button type="submit" class="primary">Create account</button>
-        </form>
-        <p id="cleaner-status" class="status" role="status"></p>
-
-        <hr class="quick-divider" />
-        <p class="muted">
-          Edit rank or delete a cleaner on <a href="/cleaners.html">Cleaners</a>,
-          edit or delete a unit on <a href="/properties.html">Properties</a>, or
-          submit this month's star ratings on <a href="/reviews.html">Reviews</a>.
-        </p>
-      </section>
+          <hr class="quick-divider" />
+          <h3 style="margin-top:0">Add cleaner</h3>
+          <form id="add-cleaner-form" class="inline-form">
+            <label>Username <input type="text" name="username" required /></label>
+            <label>Password <input type="password" name="password" required /></label>
+            <button type="submit" class="dark">Create account</button>
+          </form>
+          <p id="cleaner-status" class="status" role="status"></p>
+        </section>
+      </div>
     </div>
 
-    <section id="usage-card" class="card">
-      <h2>Assistant usage</h2>
-      <table id="usage-table">
-        <tbody>
-          <tr><th>Requests</th><td class="num" id="usage-requests">—</td></tr>
-          <tr><th>Input tokens</th><td class="num" id="usage-input-tokens">—</td></tr>
-          <tr><th>Output tokens</th><td class="num" id="usage-output-tokens">—</td></tr>
-          <tr><th>Since</th><td id="usage-since">—</td></tr>
-        </tbody>
-      </table>
-      <p id="usage-empty" class="muted" hidden>No assistant usage yet.</p>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Admin actions</h2>
+          <p>Everything else lives on its own page.</p>
+        </div>
+      </div>
+      <div class="action-grid" id="action-grid"></div>
     </section>
+
+    <div class="grid-2">
+      <section class="card flush">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title" id="roster-title"></h2>
+            <p>Who holds which property right now.</p>
+          </div>
+          <a href="/properties.html" class="chip">Edit properties</a>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Property</th><th class="hide-sm">Address</th><th>Held by</th><th class="hide-sm">State</th></tr></thead>
+            <tbody id="roster-body"></tbody>
+          </table>
+        </div>
+        <p id="roster-empty" class="empty" style="margin: 0 1.5rem 1.5rem" hidden>No properties yet.</p>
+      </section>
+
+      <section id="usage-card" class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title" id="usage-title"></h2>
+            <p>What the in-app assistant has used.</p>
+          </div>
+        </div>
+        <div class="stat-row" id="usage-table" style="grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.75rem">
+          <div class="stat tile"><span class="eyebrow">Requests</span><span class="stat-value" id="usage-requests">—</span></div>
+          <div class="stat tile"><span class="eyebrow">Input tokens</span><span class="stat-value" id="usage-input-tokens" style="font-size:1.6rem">—</span></div>
+          <div class="stat tile"><span class="eyebrow">Output tokens</span><span class="stat-value" id="usage-output-tokens" style="font-size:1.6rem">—</span></div>
+        </div>
+        <p class="muted" id="usage-since-line">Since <span id="usage-since">—</span></p>
+        <p id="usage-empty" class="empty" hidden>No assistant usage yet.</p>
+      </section>
+    </div>
 
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
+      const { icon, avatar, tierBadge, slotDots, escapeHtml, capFor } = StayCrew;
       const leaderboardBody = document.getElementById("leaderboard-body");
       const summary = document.getElementById("summary");
       const propertyStatus = document.getElementById("property-status");
       const cleanerStatus = document.getElementById("cleaner-status");
       const usageTable = document.getElementById("usage-table");
       const usageEmpty = document.getElementById("usage-empty");
-      const usageRequests = document.getElementById("usage-requests");
-      const usageInputTokens = document.getElementById("usage-input-tokens");
-      const usageOutputTokens = document.getElementById("usage-output-tokens");
-      const usageSince = document.getElementById("usage-since");
+      const usageSinceLine = document.getElementById("usage-since-line");
 
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
-      }
+      document.getElementById("hero-icon").innerHTML = icon("sliders");
+      document.getElementById("si-1").innerHTML = icon("building");
+      document.getElementById("si-2").innerHTML = icon("star");
+      document.getElementById("si-3").innerHTML = icon("lock");
+      document.getElementById("standings-title").innerHTML = icon("trophy") + "Standings";
+      document.getElementById("actions-title").innerHTML = icon("plus") + "Quick actions";
+      document.getElementById("roster-title").innerHTML = icon("building") + "Property roster";
+      document.getElementById("usage-title").innerHTML = icon("bot") + "Assistant usage";
+
+      const ACTIONS = [
+        ["/cleaners.html", "users", "Override a rank", "Set a cleaner's tier by hand until the next review batch."],
+        ["/cleaners.html", "link", "Link Slack accounts", "Map a cleaner to their Slack member ID for the channel bot."],
+        ["/reviews.html", "upload", "Submit monthly reviews", "Type the batch in or upload a CSV, then ranks recompute."],
+        ["/properties.html", "building", "Edit or delete units", "Rename a property, fix an address or remove it."],
+      ];
+      document.getElementById("action-grid").innerHTML = ACTIONS.map(
+        ([href, ic, title, text]) =>
+          `<a class="action-tile" href="${href}"><span class="tile-icon">${icon(ic)}</span>${icon("chevron", "chev")}<strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></a>`,
+      ).join("");
 
       function setStatus(el, text, kind) {
         el.textContent = text;
@@ -135,7 +214,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        StayCrew.setUser("admin", "admin");
       }
 
       async function loadProperties() {
@@ -158,21 +237,49 @@
         }
 
         leaderboardBody.innerHTML = "";
-        for (const entry of entries) {
+        document.getElementById("cleaners-empty").hidden = entries.length > 0;
+        let lastTier = null;
+        entries.forEach((entry, i) => {
+          if (entry.rank !== lastTier && lastTier !== null) {
+            const label = entry.rank === "awesome" ? "Awesome tier · 3 slots each" : "Normal tier · no slots";
+            const cut = document.createElement("tr");
+            cut.className = "cutoff" + (entry.rank === "normal" ? " slate" : "");
+            cut.innerHTML = `<td colspan="5">${escapeHtml(label)}</td>`;
+            leaderboardBody.appendChild(cut);
+          }
+          lastTier = entry.rank;
           const tr = document.createElement("tr");
-          const scoreText = entry.score === null || entry.score === undefined ? "—" : entry.score.toFixed(2);
+          const scored = entry.score !== null && entry.score !== undefined;
           const owned = byOwner.get(entry.username) ?? [];
-          const propsText = owned.length
-            ? owned.map(escapeHtml).join(", ")
-            : '<span class="muted">none</span>';
           tr.innerHTML = `
-            <td>${escapeHtml(entry.username)}</td>
-            <td><span class="pill ${escapeHtml(entry.rank)}">${escapeHtml(entry.rank)}</span></td>
-            <td class="num">${scoreText}</td>
-            <td>${propsText}</td>
+            <td class="rank-num">${i + 1}</td>
+            <td><div class="who-cell">${avatar(entry.username)}<strong>${escapeHtml(entry.username)}</strong></div></td>
+            <td>${tierBadge(entry.rank)}</td>
+            <td class="num"><span class="score${scored ? "" : " none"}">${scored ? entry.score.toFixed(2) : "—"}</span></td>
+            <td title="${escapeHtml(owned.join(", "))}">${slotDots(owned.length, capFor(entry.rank))}</td>
           `;
           leaderboardBody.appendChild(tr);
-        }
+        });
+      }
+
+      function renderRoster(properties) {
+        const body = document.getElementById("roster-body");
+        document.getElementById("roster-empty").hidden = properties.length > 0;
+        body.innerHTML = properties
+          .map((p) => {
+            const held = p.owner
+              ? `<div class="who-cell">${avatar(p.owner)}<span>${escapeHtml(p.owner)}</span></div>`
+              : `<span class="lock-state open">Unassigned</span>`;
+            const state = p.owner
+              ? `<span class="lock-state">${icon("lock")}Claimed</span>`
+              : `<span class="lock-state open">${icon("plus")}Open</span>`;
+            return `<tr class="${p.owner ? "" : "row-open"}"><td><span class="status-dot${p.owner ? "" : " open"}"></span>${escapeHtml(p.name)}</td><td class="muted hide-sm">${escapeHtml(p.address)}</td><td>${held}</td><td class="hide-sm">${state}</td></tr>`;
+          })
+          .join("");
+      }
+
+      function pct(n, d) {
+        return d ? Math.round((n / d) * 100) : 0;
       }
 
       function renderSummary(properties, cleaners) {
@@ -182,12 +289,37 @@
         summary.textContent =
           `${cleaners.length} ${cleanerWord} · ${properties.length} ${propertyWord} ` +
           `(${claimed} claimed, ${properties.length - claimed} unclaimed)`;
+
+        const tiers = { legend: 0, awesome: 0, normal: 0 };
+        for (const c of cleaners) tiers[c.rank] = (tiers[c.rank] ?? 0) + 1;
+        const scored = cleaners.filter((c) => c.score !== null && c.score !== undefined).length;
+        const totalCap = cleaners.reduce((sum, c) => sum + capFor(c.rank), 0);
+
+        document.getElementById("hs-cleaners").textContent = cleaners.length;
+        document.getElementById("hs-legend").innerHTML = `${tiers.legend}<small> / 15</small>`;
+        document.getElementById("hs-free").textContent = properties.length - claimed;
+
+        document.getElementById("st-claimed").innerHTML = `${claimed}<small>${pct(claimed, properties.length)}%</small>`;
+        document.getElementById("st-claimed-note").textContent = `of ${properties.length} ${propertyWord}`;
+        document.getElementById("st-claimed-bar").style.width = pct(claimed, properties.length) + "%";
+        document.getElementById("st-scored").innerHTML = `${scored}<small class="muted-unit">of ${cleaners.length}</small>`;
+        document.getElementById("st-scored-bar").style.width = pct(scored, cleaners.length) + "%";
+        document.getElementById("st-slots").innerHTML = `${claimed}<small class="muted-unit">of ${totalCap}</small>`;
+        document.getElementById("st-slots-bar").style.width = pct(claimed, totalCap) + "%";
+
+        StayCrew.setMeter({ label: "Properties claimed", used: claimed, total: properties.length, note: `${properties.length - claimed} open` });
+
+        for (const t of ["legend", "awesome", "normal"]) document.getElementById("pool-" + t).textContent = tiers[t];
+        document.getElementById("pool-bar").innerHTML = ["legend", "awesome", "normal"]
+          .map((t) => `<i class="${t}" style="width:${pct(tiers[t], cleaners.length)}%"></i>`)
+          .join("");
       }
 
       async function refreshAll() {
         const [properties, cleaners] = await Promise.all([loadProperties(), loadLeaderboard()]);
         renderLeaderboard(cleaners, properties);
         renderSummary(properties, cleaners);
+        renderRoster(properties);
       }
 
       async function loadUsage() {
@@ -197,17 +329,20 @@
           const usage = await res.json();
           if (!usage.totalRequests) {
             usageTable.hidden = true;
+            usageSinceLine.hidden = true;
             usageEmpty.hidden = false;
             return;
           }
           usageTable.hidden = false;
+          usageSinceLine.hidden = false;
           usageEmpty.hidden = true;
-          usageRequests.textContent = usage.totalRequests;
-          usageInputTokens.textContent = usage.totalInputTokens;
-          usageOutputTokens.textContent = usage.totalOutputTokens;
-          usageSince.textContent = usage.since ? new Date(usage.since).toLocaleString() : "—";
+          document.getElementById("usage-requests").textContent = usage.totalRequests;
+          document.getElementById("usage-input-tokens").textContent = Number(usage.totalInputTokens).toLocaleString();
+          document.getElementById("usage-output-tokens").textContent = Number(usage.totalOutputTokens).toLocaleString();
+          document.getElementById("usage-since").textContent = usage.since ? new Date(usage.since).toLocaleString() : "—";
         } catch {
           usageTable.hidden = true;
+          usageSinceLine.hidden = true;
           usageEmpty.hidden = false;
         }
       }
@@ -266,9 +401,8 @@
         location.href = "/";
       });
 
-      // Live updates (public/realtime.js): the leaderboard, the per-cleaner
-      // "preferred properties" list and the claimed/unclaimed summary all
-      // come out of refreshAll(), so any of these events just re-runs it.
+      // Live updates (public/realtime.js): standings, roster and the summary
+      // all come out of refreshAll(), so any of these events just re-runs it.
       onRealtime("ranks:changed", () => refreshAll().catch((err) => console.error(err)));
       onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
       onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));

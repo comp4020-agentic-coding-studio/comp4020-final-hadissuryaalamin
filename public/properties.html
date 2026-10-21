@@ -3,30 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Properties</title>
+    <title>Properties · StayCrew</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
-  <body>
-    <header class="topbar">
-      <div class="brand-group">
-        <a href="/home.html" class="brand-mark" aria-label="Go to home">CP</a>
-        <h1>Properties</h1>
+  <body data-page="properties" data-role="admin">
+    <section class="hero">
+      <div class="hero-main">
+        <span class="hero-icon" id="hero-icon"></span>
+        <div class="hero-text">
+          <span class="eyebrow">Allocation</span>
+          <h1>Properties</h1>
+          <p class="hero-sub">Every unit and who holds it. Cleaners claim from their own page.</p>
+        </div>
       </div>
-      <div class="who">
-        <span id="whoami">loading…</span>
-        <button id="logout" type="button">Sign out</button>
-      </div>
-    </header>
-
-    <nav class="tabs">
-      <a href="/admin.html">Dashboard</a>
-      <a href="/cleaners.html">Cleaners</a>
-      <a href="/properties.html" aria-current="true">Properties</a>
-      <a href="/reviews.html">Reviews</a>
-    </nav>
+      <dl class="hero-stats">
+        <div><dt>Total</dt><dd id="hs-total">—</dd></div>
+        <div><dt>Claimed</dt><dd id="hs-claimed">—</dd></div>
+        <div><dt>Open</dt><dd id="hs-open">—</dd></div>
+      </dl>
+    </section>
 
     <section class="card">
-      <h2>Add a property</h2>
+      <h2 class="card-title" id="add-title"></h2>
       <form id="add-property-form" class="inline-form">
         <label>Name <input type="text" name="name" autocomplete="off" required /></label>
         <label>Address <input type="text" name="address" autocomplete="off" required /></label>
@@ -35,37 +33,42 @@
       <p id="properties-status" class="status" role="status"></p>
     </section>
 
-    <section id="properties-section" class="card">
-      <h2>All properties</h2>
+    <section id="properties-section" class="card flush">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title" id="all-title"></h2>
+          <p>A claim is held in the database until the cleaner releases it.</p>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Name</th><th>Address</th><th>Claimed by</th><th><span class="visually-hidden">Actions</span></th></tr>
+            <tr><th>Property</th><th>Address</th><th>Held by</th><th>State</th><th><span class="visually-hidden">Actions</span></th></tr>
           </thead>
           <tbody id="properties-body"></tbody>
         </table>
       </div>
+      <p id="properties-empty" class="empty" style="margin: 0 1.5rem 1.5rem" hidden>No properties yet. Add the first one above.</p>
     </section>
 
     <footer><a href="/readme/">About this app</a></footer>
 
     <script src="/realtime.js"></script>
+    <script src="/shell.js"></script>
     <script>
-      const whoami = document.getElementById("whoami");
+      const { icon, avatar, escapeHtml } = StayCrew;
       const propertiesBody = document.getElementById("properties-body");
       const propertiesStatus = document.getElementById("properties-status");
       const TRASH_ICON =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+
+      document.getElementById("hero-icon").innerHTML = icon("building");
+      document.getElementById("add-title").innerHTML = icon("plus") + "Add a property";
+      document.getElementById("all-title").innerHTML = icon("building") + "All properties";
 
       function setStatus(el, text, kind) {
         el.textContent = text;
         el.className = "status" + (kind ? " " + kind : "");
-      }
-
-      function escapeHtml(value) {
-        const div = document.createElement("div");
-        div.textContent = value ?? "";
-        return div.innerHTML;
       }
 
       async function api(path, options) {
@@ -91,7 +94,7 @@
           location.href = "/cleaner.html";
           throw new Error("not an admin");
         }
-        whoami.textContent = "admin";
+        StayCrew.setUser("admin", "admin");
       }
 
       async function loadProperties() {
@@ -100,6 +103,13 @@
       }
 
       function renderProperties(properties) {
+        const claimed = properties.filter((p) => p.owner).length;
+        document.getElementById("hs-total").textContent = properties.length;
+        document.getElementById("hs-claimed").textContent = claimed;
+        document.getElementById("hs-open").textContent = properties.length - claimed;
+        document.getElementById("properties-empty").hidden = properties.length > 0;
+        StayCrew.setMeter({ label: "Properties claimed", used: claimed, total: properties.length, note: `${properties.length - claimed} open` });
+
         propertiesBody.innerHTML = "";
         for (const property of properties) {
           const tr = document.createElement("tr");
@@ -110,12 +120,20 @@
       }
 
       function renderPropertyRow(tr, property) {
+        tr.className = property.owner ? "" : "row-open";
+        const held = property.owner
+          ? `<div class="who-cell">${avatar(property.owner)}<span>${escapeHtml(property.owner)}</span></div>`
+          : '<span class="muted">unclaimed</span>';
+        const state = property.owner
+          ? `<span class="lock-state">${icon("lock")}Claimed</span>`
+          : `<span class="lock-state open">${icon("plus")}Open</span>`;
         tr.innerHTML = `
-          <td>${escapeHtml(property.name)}</td>
-          <td>${escapeHtml(property.address)}</td>
-          <td>${property.owner ? escapeHtml(property.owner) : '<span class="muted">unclaimed</span>'}</td>
+          <td><span class="status-dot${property.owner ? "" : " open"}"></span><strong style="color:var(--text)">${escapeHtml(property.name)}</strong></td>
+          <td class="muted">${escapeHtml(property.address)}</td>
+          <td>${held}</td>
+          <td>${state}</td>
           <td class="actions">
-            <button type="button" data-edit="${property.id}">Edit</button>
+            <button type="button" class="ghost" data-edit="${property.id}">Edit</button>
             <button type="button" class="danger icon-btn" data-delete="${property.id}" title="Delete ${escapeHtml(property.name)}" aria-label="Delete ${escapeHtml(property.name)}">${TRASH_ICON}</button>
           </td>
         `;
@@ -124,8 +142,9 @@
       }
 
       function startEditProperty(tr, property) {
+        tr.className = "";
         tr.innerHTML = `
-          <td colspan="3">
+          <td colspan="4">
             <div class="edit-fields">
               <input type="text" value="${escapeHtml(property.name)}" data-field="name" aria-label="Name" />
               <input type="text" value="${escapeHtml(property.address)}" data-field="address" aria-label="Address" />
@@ -133,7 +152,7 @@
           </td>
           <td class="actions">
             <button type="button" class="primary" data-save>Save</button>
-            <button type="button" data-cancel>Cancel</button>
+            <button type="button" class="ghost" data-cancel>Cancel</button>
           </td>
         `;
         tr.querySelector("[data-save]").addEventListener("click", () => saveProperty(tr, property.id));
@@ -213,9 +232,8 @@
         location.href = "/";
       });
 
-      // Live updates (public/realtime.js): this page lists every property
-      // regardless of owner, so a claim/release elsewhere never removes a
-      // row — it just needs the "Claimed by" column refreshed.
+      // Live updates (public/realtime.js): a claim/release elsewhere never
+      // removes a row here, it just changes who holds it.
       onRealtime("pick:claimed", () => refreshAll().catch((err) => console.error(err)));
       onRealtime("pick:released", () => refreshAll().catch((err) => console.error(err)));
 

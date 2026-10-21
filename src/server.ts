@@ -159,7 +159,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
   <body class="readme-body">
     <header class="topbar">
       <div class="brand-group">
-        <a href="/" class="brand-mark" aria-label="Back to the app">CP</a>
+        <a href="/" class="brand-mark" aria-label="Back to the app">SC</a>
         <span class="muted">About this app</span>
       </div>
       <a href="/">Back to the app</a>
