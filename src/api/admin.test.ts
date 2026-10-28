@@ -611,6 +611,24 @@ describe("admin API — realtime broadcast", () => {
     expect(broadcast).toHaveBeenCalledWith({ type: "ranks:changed" });
   });
 
+  it("deletes a cleaner who has used the assistant (assistant_usage rows)", async () => {
+    const db = createConnection(":memory:");
+    const adminId = insertAdmin(db);
+    const cleanerId = insertCleaner(db, "assistant-user");
+    db.prepare(
+      "INSERT INTO assistant_usage (user_id, input_tokens, output_tokens) VALUES (?, ?, ?)",
+    ).run(cleanerId, 10, 5);
+
+    const app = buildApp(db);
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/cleaners/${cleanerId}`,
+      headers: { cookie: cookieFor(adminId, "admin") },
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
+
   it("broadcasts ranks:changed once for a POST /api/cleaners/:id/rank override", async () => {
     const db = createConnection(":memory:");
     const adminId = insertAdmin(db);

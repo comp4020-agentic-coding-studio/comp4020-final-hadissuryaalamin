@@ -301,6 +301,7 @@ export default async function adminRoutes(app: FastifyInstance, opts: { db: Data
       const run = db.transaction((id: number) => {
         db.prepare("DELETE FROM picks WHERE cleaner_id = ?").run(id);
         db.prepare("DELETE FROM reviews WHERE cleaner_id = ?").run(id);
+        db.prepare("DELETE FROM assistant_usage WHERE user_id = ?").run(id);
         db.prepare("DELETE FROM cleaners WHERE user_id = ?").run(id);
         db.prepare("DELETE FROM users WHERE id = ?").run(id);
         recomputeAndApply(db);
