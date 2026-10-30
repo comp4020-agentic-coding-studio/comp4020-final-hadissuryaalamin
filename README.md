@@ -11,6 +11,12 @@ copy, because there is no stranger to market to.
 
 Live at <https://comp4020-final-hadissuryaalamin.fly.dev>.
 
+## Want to try it?
+
+There's no sign-up — every account is created by hand by the Admin (see
+above). If you'd like a login to click around with, email
+<hadisssurya@gmail.com> and I'll send you a Cleaner (or Admin) credential.
+
 ## What each person can do
 
 **Cleaners** see the leaderboard, every property and who holds it, and their
@@ -139,3 +145,53 @@ restart.
 `pnpm check` runs the typecheck, the unit tests, and `spec/` against a server
 already running on port 8080. Pushing to `main` runs the same checks in CI and
 deploys to Fly if they pass. `PROCESS.md` tells how the app was built.
+
+## Setting up the assistant (LLM)
+
+The assistant is a thin wrapper (`src/assistant/client.ts`) around the
+Anthropic API, given a small set of read/propose tools (`get_my_status`,
+`get_leaderboard`, `get_properties`, `propose_claim_property`,
+`propose_release_property`, `execute_pending_action`,
+`cancel_pending_action`) — see `docs/superpowers/specs/` for the original
+design. To run it:
+
+1. Get an Anthropic API key, or (this course's setup) the strproxy key and
+   base URL from Canvas.
+2. Set three env vars before starting the server:
+   - `ANTHROPIC_AUTH_TOKEN` — the API key.
+   - `ANTHROPIC_BASE_URL` — only needed for a proxy (e.g. the course's
+     strproxy); omit for a direct Anthropic key.
+   - `ANTHROPIC_MODEL` — optional, defaults to `claude-sonnet-5`.
+3. On Fly: `mise exec -- flyctl secrets set ANTHROPIC_AUTH_TOKEN=... ANTHROPIC_BASE_URL=...`.
+
+No key set → the chat still loads but every message gets a legible
+"Could not reach the assistant right now" reply instead of a crash; the
+manual pages and buttons keep working regardless.
+
+## Setting up the Slack connection
+
+The Slack channel is a second entry point into the same assistant — a
+linked Cleaner can ask for a property in plain words there instead of the
+in-app chat. It is cleaner-only (never admin) and uses the same
+propose-then-confirm flow, so nothing executes on the first message.
+
+1. Create a Slack workspace and a Slack App in it (the course set this up
+   on a workspace the student owns, not a shared one).
+2. Under **Event Subscriptions**, point the Request URL at
+   `https://<your-fly-app>.fly.dev/api/slack/events` and subscribe to
+   `message.channels`. Slack calls this once to verify it (the app answers
+   the `url_verification` challenge automatically).
+3. Under **OAuth & Permissions**, add the `chat:write` bot scope and
+   install the app to the workspace.
+4. Create (or reuse) a channel, invite the bot to it, and copy its channel
+   ID.
+5. Set three Fly secrets:
+   `mise exec -- flyctl secrets set SLACK_BOT_TOKEN=... SLACK_SIGNING_SECRET=... SLACK_CHANNEL_ID=...`
+6. In `admin.html`, open a cleaner's edit form and set their Slack user ID
+   (an Admin does this per cleaner — no self-service linking). Only a
+   linked cleaner's messages get a reply; everyone else gets a "Slack
+   account isn't linked — ask an Admin" thread reply.
+
+Every request is verified against `SLACK_SIGNING_SECRET` (HMAC over the
+raw body, rejecting anything older than 5 minutes) before anything runs.
+Full design and threat notes: `docs/superpowers/specs/2026-10-12-slack-integration-design.md`.
