@@ -11,11 +11,50 @@ copy, because there is no stranger to market to.
 
 Live at <https://comp4020-final-hadissuryaalamin.fly.dev>.
 
+## For the marker
+
+Log in as Admin at the link above with:
+
+- **Username:** `admin`
+- **Password:** `admin12345`
+
+From the Admin account, open the Cleaners page and add one or two Cleaner
+accounts (any username/password you like) — that takes a few seconds. A new
+Cleaner starts normal with no free slots, so they can't claim anything yet:
+on the same page, use **Override a rank** to set the new account to legend
+(5 slots) or awesome (3 slots) before trying to claim a property. Then, in a
+second Chrome profile (or incognito window), log in as one of those Cleaners
+alongside the Admin session: claiming/releasing a property as the Cleaner and
+running a review batch as the Admin both broadcast to every open page within
+about a second, which is the multi-user and real-time behaviour to look for.
+Two Cleaner accounts (both overridden to legend/awesome) in two separate
+profiles also show the claim race (only one wins, the other gets "Property
+already claimed").
+No install step or command is needed; everything else below is background
+reading, not a prerequisite for marking.
+
+### Trying the Slack entry point
+
+The same claim/release actions are also reachable from a linked Cleaner's
+Slack messages, in plain words. To try it:
+
+1. Join the workspace: <https://join.slack.com/share/enQtMTI1Mzk4MDEwMzAyMTItYjE2M2M5ZTU4YjVlN2VlMWEzMTE2MWRiMDdlYTg2MjUyMTQ4Y2IxZmVhN2E5ZjViZmY0OTYzZDQwZTk3NGIxOA>
+   and open the channel the bot is in.
+2. In Slack, click your profile picture → **...** → **Copy member ID**.
+3. As Admin, open the Cleaners page, edit one of the Cleaner accounts you
+   made above, and paste that Slack ID into its Slack field.
+4. Message the bot in the channel in plain words, e.g. "claim property 3". It
+   proposes the action and waits for a "yes" before anything is written —
+   nothing executes on the first message.
+
+An unlinked Cleaner's messages just get a "Slack account isn't linked — ask
+an Admin" reply, so step 3 is required before step 4 does anything.
+
 ## Want to try it?
 
-There's no sign-up — every account is created by hand by the Admin (see
-above). If you'd like a login to click around with, email
-<hadisssurya@gmail.com> and I'll send you a Cleaner (or Admin) credential.
+There's no public sign-up — every account besides the one above is created by
+hand by the Admin. If you'd like a Cleaner credential of your own instead of
+using the Admin login above, email <hadisssurya@gmail.com>.
 
 ## What each person can do
 
@@ -32,6 +71,16 @@ and links a cleaner to their Slack account.
 The full rule set, why it is drawn where it is, and where the server checks
 each part is in
 [`docs/decisions/0002-access-control.md`](docs/decisions/0002-access-control.md).
+
+## Why claim a property at all
+
+The claim system exists to reward good performance with something a cleaner
+actually wants, rather than just a number on a leaderboard: first pick of
+which properties they keep cleaning. A cleaner who's earned a good rank gets
+to settle into properties they know, instead of a different unit every month.
+That ownership is also expected to pay back to the business — a cleaner who
+keeps the same unit tends to notice small problems earlier and take more
+care of it than one rotating through a different property every batch.
 
 ## How the ranking works
 
